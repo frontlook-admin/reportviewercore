@@ -6,7 +6,7 @@ using System.Windows.Forms;
 
 namespace ReportViewerCore
 {
-	class ReportViewerForm : Form
+	public class ReportViewerForm : Form
 	{
 		private readonly ReportViewer reportViewer;
 
@@ -24,6 +24,9 @@ namespace ReportViewerCore
 			Report.Load(reportViewer.LocalReport);
 			reportViewer.RefreshReport();
 			base.OnLoad(e);
+
+
+
 		}
 	}
 }

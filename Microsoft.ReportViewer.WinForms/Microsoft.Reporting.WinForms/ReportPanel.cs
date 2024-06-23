@@ -824,6 +824,8 @@ namespace Microsoft.Reporting.WinForms
 
 		public event EventHandler Print;
 
+		public event EventHandler DPrint;
+
 		public event EventHandler PageSettings;
 
 		public event ExportEventHandler Export;

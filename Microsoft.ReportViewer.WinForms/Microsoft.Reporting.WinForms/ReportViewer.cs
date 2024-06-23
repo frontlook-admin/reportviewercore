@@ -935,6 +935,25 @@ namespace Microsoft.Reporting.WinForms
 				UpdateUIState(e2);
 			}
 		}
+		private void OnDPrint(object sender, EventArgs e)
+		{
+			try
+			{
+				ReportPrintEventArgs reportPrintEventArgs = new ReportPrintEventArgs(CreateDefaultPrintSettings());
+				if (this.Print != null)
+				{
+					this.Print(this, reportPrintEventArgs);
+				}
+				if (!reportPrintEventArgs.Cancel)
+				{
+                    DPrint();
+				}
+			}
+			catch (Exception e2)
+			{
+				UpdateUIState(e2);
+			}
+		}
 
 		private bool OnPrintingBegin(object sender, PrinterSettings printerSettings)
 		{
@@ -1206,6 +1225,7 @@ namespace Microsoft.Reporting.WinForms
 			winRSviewer.ReportRefresh += new System.EventHandler(OnRefresh);
 			winRSviewer.PageSettings += new System.EventHandler(OnPageSetup);
 			winRSviewer.Print += new System.EventHandler(OnPrint);
+			winRSviewer.DPrint += new System.EventHandler(OnDPrint);
 			winRSviewer.Export += new Microsoft.Reporting.WinForms.ExportEventHandler(OnExport);
 			winRSviewer.Back += new System.EventHandler(OnBack);
 			reportToolBar.Dock = DockStyle.Top;
@@ -1216,6 +1236,7 @@ namespace Microsoft.Reporting.WinForms
 			reportToolBar.ReportRefresh += new System.EventHandler(OnRefresh);
 			reportToolBar.PageSetup += new System.EventHandler(OnPageSetup);
 			reportToolBar.Print += new System.EventHandler(OnPrint);
+			reportToolBar.DPrint += new System.EventHandler(OnDPrint);
 			reportToolBar.Export += new Microsoft.Reporting.WinForms.ExportEventHandler(OnExport);
 			reportToolBar.Search += new Microsoft.Reporting.WinForms.SearchEventHandler(OnSearch);
 			reportToolBar.Back += new System.EventHandler(OnBack);
@@ -1811,6 +1832,99 @@ namespace Microsoft.Reporting.WinForms
 			return PrintDialog(CreateDefaultPrintSettings());
 		}
 
+		public string PrintSettingFilePath { get; set; }
+
+		// save print settings for next time
+		public void SavePrintSetting(PrintDialog settings)
+        {
+			if (PrintSettingFilePath == null)
+			{
+				return;
+            
+			}
+			else
+			{
+				File.WriteAllText(PrintSettingFilePath, new CustomPrintDialog(settings).CastToJson());
+			}
+
+        }
+
+		public void DPrint()
+		{
+			//check if print setting file exists
+			if (PrintSettingFilePath == null)
+			{
+				DefaultPrintMode();
+            }
+			else
+			{
+				if(File.Exists(PrintSettingFilePath))
+                {
+                    //var printerSettings = new PrinterSettings();
+					var printSettingsTxt = File.ReadAllText(PrintSettingFilePath);
+                    var pd = printSettingsTxt.CastToClass<CustomPrintDialog>().GetPrintDialog();
+
+					if (pd == null)
+					{
+						DefaultPrintMode();
+                    }
+					var printerSettings = pd.PrinterSettings;
+                    if (OnPrintingBegin(this, printerSettings))
+                    {
+                        string displayNameForUse = Report.DisplayNameForUse;
+                        if (CurrentReport.FileManager.Status == FileManagerStatus.Aborted || CurrentReport.FileManager.Status == FileManagerStatus.NotStarted)
+                        {
+                            bool flag = printerSettings.PrintRange == PrintRange.AllPages;
+                            int startPage;
+                            int endPage;
+                            if (!flag)
+                            {
+                                startPage = 1;
+                                endPage = printerSettings.ToPage;
+                            }
+                            else
+                            {
+                                startPage = 0;
+                                endPage = 0;
+                            }
+                            string deviceInfo = CreateEMFDeviceInfo(startPage, endPage);
+                            ProcessAsyncInvokes();
+                            BeginAsyncRender("IMAGE", allowInternalRenderers: true, deviceInfo, PageCountMode.Estimate, CreateStreamEMFPrintOnly, OnRenderingCompletePrintOnly, new PostRenderArgs(isDifferentReport: false, !flag), requireCompletionOnUIThread: false);
+                        }
+                        ReportPrintDocument reportPrintDocument = new ReportPrintDocument(CurrentReport.FileManager, (PageSettings)PageSettings.Clone());
+                        reportPrintDocument.DocumentName = displayNameForUse;
+                        reportPrintDocument.PrinterSettings = printerSettings;
+                        reportPrintDocument.Print();
+                    }
+                }
+                else
+                {
+					DefaultPrintMode();
+                }
+			}
+
+		}
+
+		private void DefaultPrintMode()
+		{
+            try
+            {
+                ReportPrintEventArgs reportPrintEventArgs = new ReportPrintEventArgs(CreateDefaultPrintSettings());
+                if (this.Print != null)
+                {
+                    this.Print(this, reportPrintEventArgs);
+                }
+                if (!reportPrintEventArgs.Cancel)
+                {
+                    PrintDialog(reportPrintEventArgs.PrinterSettings);
+                }
+            }
+            catch (Exception e2)
+            {
+                UpdateUIState(e2);
+            }
+        }
+
 		public DialogResult PrintDialog(PrinterSettings printerSettings)
 		{
 			if (!ReportViewerStatus.DoesStateAllowPrinting(m_lastUIState))
@@ -1852,6 +1966,7 @@ namespace Microsoft.Reporting.WinForms
 						ReportPrintDocument reportPrintDocument = new ReportPrintDocument(CurrentReport.FileManager, (PageSettings)PageSettings.Clone());
 						reportPrintDocument.DocumentName = displayNameForUse;
 						reportPrintDocument.PrinterSettings = printDialog.PrinterSettings;
+						SavePrintSetting(printDialog);
 						reportPrintDocument.Print();
 						return dialogResult;
 					}
@@ -1861,7 +1976,7 @@ namespace Microsoft.Reporting.WinForms
 			}
 		}
 
-		private PrinterSettings CreateDefaultPrintSettings()
+		public PrinterSettings CreateDefaultPrintSettings()
 		{
 			PrinterSettings printerSettings = PrinterSettings;
 			printerSettings.PrintRange = PrintRange.AllPages;

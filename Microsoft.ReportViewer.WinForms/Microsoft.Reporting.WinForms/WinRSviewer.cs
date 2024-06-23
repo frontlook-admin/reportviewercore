@@ -132,6 +132,18 @@ namespace Microsoft.Reporting.WinForms
 			}
 		}
 
+		public event EventHandler DPrint
+		{
+			add
+			{
+				m_reportPanel.DPrint += value;
+			}
+			remove
+			{
+				m_reportPanel.DPrint -= value;
+			}
+		}
+
 		public event EventHandler PageSettings
 		{
 			add
