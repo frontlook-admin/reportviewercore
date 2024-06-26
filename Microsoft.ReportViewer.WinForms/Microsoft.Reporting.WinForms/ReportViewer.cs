@@ -1,3 +1,4 @@
+using FrontLookCode;
 using Microsoft.ReportingServices.Common;
 using Microsoft.ReportingServices.Interfaces;
 using Microsoft.ReportingServices.Rendering.SPBProcessing;
@@ -57,7 +58,7 @@ namespace Microsoft.Reporting.WinForms
 
 		private int m_toolbarVisibility = -1;
 
-		private UIState m_lastUIState;
+		public UIState m_lastUIState;
 
 		private SearchState m_searchState;
 

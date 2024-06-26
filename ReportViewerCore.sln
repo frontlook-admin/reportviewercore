@@ -22,6 +22,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ReportViewerCore.Sample.Win
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FrontLookCoreLibraryAssembly", "..\FrontLookCore\FrontLookCoreLibraryAssembly\FrontLookCoreLibraryAssembly.csproj", "{5B9A0AFE-93F3-49D8-AD7E-2F746C1A2C71}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CliReportCompiler", "RdlcCliReportCompiler\CliReportCompiler.csproj", "{24B4D1E9-7D6D-444F-A347-483978E2CAF6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -38,6 +40,14 @@ Global
 		{12E6A560-8CB6-42EA-8927-31F0746452EE}.Debug|x86.Build.0 = Debug|Any CPU
 		{12E6A560-8CB6-42EA-8927-31F0746452EE}.Release|x86.ActiveCfg = Release|Any CPU
 		{12E6A560-8CB6-42EA-8927-31F0746452EE}.Release|x86.Build.0 = Release|Any CPU
+		{24B4D1E9-7D6D-444F-A347-483978E2CAF6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{24B4D1E9-7D6D-444F-A347-483978E2CAF6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{24B4D1E9-7D6D-444F-A347-483978E2CAF6}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{24B4D1E9-7D6D-444F-A347-483978E2CAF6}.Debug|x86.Build.0 = Debug|Any CPU
+		{24B4D1E9-7D6D-444F-A347-483978E2CAF6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{24B4D1E9-7D6D-444F-A347-483978E2CAF6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{24B4D1E9-7D6D-444F-A347-483978E2CAF6}.Release|x86.ActiveCfg = Release|Any CPU
+		{24B4D1E9-7D6D-444F-A347-483978E2CAF6}.Release|x86.Build.0 = Release|Any CPU
 		{5B9A0AFE-93F3-49D8-AD7E-2F746C1A2C71}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{5B9A0AFE-93F3-49D8-AD7E-2F746C1A2C71}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5B9A0AFE-93F3-49D8-AD7E-2F746C1A2C71}.Debug|x86.ActiveCfg = Debug|x86
@@ -116,5 +126,9 @@ Global
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {D1BF1BAC-F639-48A2-9CDD-D49DCC442DC9}
+	EndGlobalSection
+EndGlobal
+lobal
+-D49DCC442DC9}
 	EndGlobalSection
 EndGlobal

@@ -2,7 +2,7 @@ using System.Diagnostics;
 
 namespace Microsoft.Reporting.WinForms
 {
-	public sealed class ReportViewerStatus
+	public class ReportViewerStatus
 	{
 		private bool m_canNavigatePages;
 
@@ -222,7 +222,7 @@ namespace Microsoft.Reporting.WinForms
 			return state != UIState.LongRunningAction;
 		}
 
-		internal static bool DoesStateAllowPrinting(UIState state)
+		public static bool DoesStateAllowPrinting(UIState state)
 		{
 			if (state != UIState.ProcessingSuccess)
 			{

@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
+    <OutputType>Exe</OutputType>
 	  <TargetFrameworks>net8.0-Windows</TargetFrameworks>
 	  <FrontLook>8.24.*</FrontLook>
   </PropertyGroup>

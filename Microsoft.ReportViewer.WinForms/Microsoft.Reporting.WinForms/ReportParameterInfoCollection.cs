@@ -13,16 +13,15 @@ namespace Microsoft.Reporting.WinForms
 			get
 			{
                 using IEnumerator<ReportParameterInfo> enumerator = GetEnumerator();
-					while (enumerator.MoveNext())
-					{
-						ReportParameterInfo current = enumerator.Current;
-						if (string.Compare(current.Name, name, StringComparison.OrdinalIgnoreCase) == 0)
-						{
-							return current;
-						}
-					}
-				}
-				return null;
+                while (enumerator.MoveNext())
+                {
+                    ReportParameterInfo current = enumerator.Current;
+                    if (string.Compare(current.Name, name, StringComparison.OrdinalIgnoreCase) == 0)
+                    {
+                        return current;
+                    }
+                }
+                return null;
 			}
 		}
 
@@ -30,11 +29,11 @@ namespace Microsoft.Reporting.WinForms
 			: base(parameterInfos)
 		{
             using IEnumerator<ReportParameterInfo> enumerator = GetEnumerator();
-				while (enumerator.MoveNext())
-				{
-					enumerator.Current.SetDependencies(this);
-				}
-			}
+            while (enumerator.MoveNext())
+            {
+                enumerator.Current.SetDependencies(this);
+            }
+        }
 
 		internal ReportParameterInfoCollection()
 			: base((IList<ReportParameterInfo>)new ReportParameterInfo[0])

@@ -26,7 +26,7 @@ namespace Microsoft.Reporting.WinForms
 			}
 		}
 
-		internal ReportPrintEventArgs(PrinterSettings printerSettings)
+		public ReportPrintEventArgs(PrinterSettings printerSettings)
 		{
 			if (printerSettings == null)
 			{

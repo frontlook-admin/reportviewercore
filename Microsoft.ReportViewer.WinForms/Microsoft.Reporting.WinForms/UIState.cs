@@ -1,6 +1,6 @@
 namespace Microsoft.Reporting.WinForms
 {
-	internal enum UIState
+	public enum UIState
 	{
 		NoReport,
 		LongRunningAction,

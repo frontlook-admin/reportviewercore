@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
+	  <TargetFrameworks>net8.0-Windows</TargetFrameworks>
   </PropertyGroup>
 
   <ItemGroup>
