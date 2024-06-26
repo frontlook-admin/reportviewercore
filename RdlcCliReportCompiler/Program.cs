@@ -1,4 +1,5 @@
 ﻿using FastReport.Data;
+using FrontLookCode;
 using FrontLookCoreDbAccessLibrary.Desktop.FL_RDLC;
 using FrontLookCoreDbAccessLibrary.FL_FastReport;
 using FrontLookCoreLibraryAssembly.FL_General;
@@ -8,6 +9,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Windows.Forms;
 using static System.Windows.Forms.Design.AxImporter;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement.StartPanel;
@@ -35,6 +37,7 @@ namespace CliReportCompiler
             { "Mode", "m" },
             { "ExportFormat", "ef" },
             { "ExportPath", "ep" },
+            { "PrintSetupFile", "psf" },
             { "Test", "t" }
         };
 
@@ -43,21 +46,22 @@ namespace CliReportCompiler
         {
             @"Usage: CliReportCompiler.exe options
 Options:
-  --ReportPath|-rp      Path to the RDLC report file.
-  --ReportDataSource|-ds Path to the data source file (should be in xml along with xml schema in single file).
-  --ReportName|-rn      Name of the report.
-  --Mode|-m             Operation mode: Preview, Print, or Export.
-  --ExportFormat|-ef    Export format: PDF, Excel, Word, or Image.
-  --ExportPath|-ep      Path where the exported file will be saved.
-  --Test|-t             Test message (for debugging purposes).
-  --Demo|-d                Run a demo of the ReportViewer.
-  --Help|-h             Display this help message.
+  --ReportPath|-rp          Path to the RDLC report file.
+  --ReportDataSource|-ds    Path to the data source file (should be in xml along with xml schema in single file).
+  --ReportName|-rn          Name of the report.
+  --Mode|-m                 Operation mode: Preview, Print, PrintSetup, or Export.
+  --ExportFormat|-ef        Export format: PDF, Excel, Word, or Image.
+  --ExportPath|-ep          Path where the exported file will be saved.
+  --PrintSetupFile|-psf     Path to the print setup file(JsonFile).
+  --Test|-t                 Test message (for debugging purposes).
+  --Demo|-d                 Run a demo of the ReportViewer.
+  --Help|-h                 Display this help message.
 
 
-    Parameters          Pass the parameters in the data source file with table name RldcParameters.
+    Parameters              Pass the parameters in the data source file with table name RldcParameters.
 
 Example:
-  CliReportCompiler.exe --reportPath ""C:\path\to\report.rdlc"" --reportDataSource ""C:\path\to\data.xml"" --Parameters ""json Parameters"" --ReportName ""ReportName"" --Mode ""Preview"" --ExportFormat ""PDF"" --ExportPath ""C:\path\to\exported\file"" --test ""Msg""
+  CliReportCompiler.exe --reportPath ""C:\path\to\report.rdlc"" --reportDataSource ""C:\path\to\data.xml"" --PrintSetupFile ""C:\path\to\printsetup.json""  --Parameters ""json Parameters"" --ReportName ""ReportName"" --Mode ""Preview"" --ExportFormat ""PDF"" --ExportPath ""C:\path\to\exported\file"" --test ""Msg""
   CliReportCompiler --help".FL_ConsoleWriteDebug();
         }
 
@@ -135,8 +139,21 @@ Example:
 
             try
             {
+
+                if (Array.Exists(args, arg => arg.ToUpper() == "--HELP" || arg.ToUpper() == "-H"))
+                {
+                    ShowUsage();
+                    return;
+                }
+                // Run the demo if the --demo option is specified.
+                if (Array.Exists(args, arg => arg.ToUpper() == "--DEMO" || arg.ToUpper() == "-D" || arg.ToUpper() == "DEMO" || arg.ToUpper() == "D"))
+                {
+                    RunDemo();
+                    return;
+                }
                 ParseArguments(args);
                 Execute();
+                GetParameters.Clear();
                 ParseArguments();
             }
             catch (Exception ex)
@@ -146,10 +163,13 @@ Example:
             }
         }
 
+        //PageSetupDialog()
+        //PageSettings
+
         [STAThread]
 		static void Main(string[] args)
 		{
-            if(args.Length == 0)
+            if (args.Length == 0)
             {
                 ParseArguments();
             }
@@ -186,11 +206,33 @@ Example:
                 MessageBox.Show(GetParameters["Test"]);
             }
 
-            if (!GetParameters.ContainsKey("ReportPath") || !GetParameters.ContainsKey("ReportDataSource") || !GetParameters.ContainsKey("ReportName") || !GetParameters.ContainsKey("Mode"))
+            if (!GetParameters.ContainsKey("ReportPath") || !GetParameters.ContainsKey("ReportDataSource") || !GetParameters.ContainsKey("ReportName") || !GetParameters.ContainsKey("Mode") || !GetParameters.ContainsKey("PrintSetupFile"))
             {
                 //Console.WriteLine("Invalid number of arguments.");
                 ShowUsage();
-                throw new ArgumentException("Invalid arguments.");
+                //throw exception showing the specific key that is missing
+                StringBuilder exceptionMsg = new StringBuilder();
+                if (!GetParameters.ContainsKey("ReportPath"))
+                {
+                    exceptionMsg.AppendLine("ReportPath is missing.");
+                }
+                if (!GetParameters.ContainsKey("ReportDataSource"))
+                {
+                    exceptionMsg.AppendLine("ReportDataSource is missing.");
+                }
+                if (!GetParameters.ContainsKey("ReportName"))
+                {
+                    exceptionMsg.AppendLine("ReportName is missing.");
+                }
+                if (!GetParameters.ContainsKey("Mode"))
+                {
+                    exceptionMsg.AppendLine("Mode is missing.");
+                }
+                if (!GetParameters.ContainsKey("PrintSetupFile"))
+                {
+                    exceptionMsg.AppendLine("PrintSetupFile is missing.");
+                }
+                throw new ArgumentException(exceptionMsg.ToString());
             }
             else
             {
@@ -202,28 +244,50 @@ Example:
         {
             //--ReportPath "G:\Repos\frontlook-admin\AccLead\AccLead.Desktop\bin\Debug\net8.0-windows\ReportTemplates\Reports\RDLC\FinalAccount\TrialBalanceReport\TrialBalanceReport.rdlc" --ReportDataSource "C:\Users\deban\AppData\Local\Temp\tmp3kczp5.tmp" --ReportName "TrialBalanceReport.rdlc" --Mode "Preview"
 
-            //if the below parameters are not passed, then throw an exception
-            if (!GetParameters.ContainsKey("ReportPath") || !GetParameters.ContainsKey("ReportDataSource") || !GetParameters.ContainsKey("ReportName") || !GetParameters.ContainsKey("Mode"))
-            {
-                throw new ArgumentException("Invalid arguments.");
-            }
-
             var reportPath = GetParameters["ReportPath"];
             var dsFile = GetParameters["ReportDataSource"];
             var ds = File.ReadAllText(dsFile).FL_CastXmlToDataSet();
             
             var reportName = GetParameters["ReportName"];
             var mode = GetParameters["Mode"];
+            var printSetupFile = GetParameters["PrintSetupFile"];
 
 
             var rldcReportCompiler = new FL_IRdlcReport()
             {
                 DataTables = ds,
                 ReportFile = reportPath,
-                ReportName = reportName
+                ReportName = reportName,
+                PrintSettingFilePath = printSetupFile
             };
 
-            if(ds.Tables.Count == 0)
+
+            //check file exists
+            if(!Directory.Exists(Path.GetDirectoryName(printSetupFile)))
+            {
+                //create the directory
+                Directory.CreateDirectory(Path.GetDirectoryName(printSetupFile));
+            }
+            else if (File.Exists(printSetupFile))
+            {
+                if (!string.IsNullOrEmpty(File.ReadAllText(printSetupFile)))
+                {
+                    var PageSettings = File.ReadAllText(printSetupFile).FL_CastToClass<CustomPrintDialog>();
+                    if (PageSettings != null && PageSettings.CPageSettings != null)
+                    {
+                        rldcReportCompiler.PrintSettings = PageSettings;
+                    }
+                    else
+                    {
+                        throw new Exception("Invalid PrintSetupFile");
+                    }
+                }
+            }
+
+
+
+
+            if (ds.Tables.Count == 0)
             {
                 throw new Exception("No data to load");
             }
