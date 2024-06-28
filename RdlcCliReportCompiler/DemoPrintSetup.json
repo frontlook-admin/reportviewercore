@@ -1,0 +1,37 @@
+{
+  "PrinterName": "Canon MF230 Series UFRII LT",
+  "AllowSomePages": false,
+  "AllowSelection": false,
+  "AllowPrintToFile": false,
+  "PrintToFile": false,
+  "UseEXDialog": false,
+  "ShowNetwork": false,
+  "PrintRange": 0,
+  "Copies": 1,
+  "Collate": false,
+  "PaperSize": {
+    "Height": 1169,
+    "Kind": 9,
+    "PaperName": "A4",
+    "RawKind": 9,
+    "Width": 827
+  },
+  "Landscape": false,
+  "PrintType": 2,
+  "CPageSettings": {
+    "Color": false,
+    "Landscape": false,
+    "PaperSize": null,
+    "Margins": "39, 20, 16, 12",
+    "PaperSource": {
+      "Kind": 7,
+      "RawKind": 7,
+      "SourceName": "Auto"
+    },
+    "PrinterResolution": {
+      "Kind": 0,
+      "X": 1200,
+      "Y": 0
+    }
+  }
+}

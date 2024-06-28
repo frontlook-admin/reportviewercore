@@ -1,9 +1,13 @@
-﻿using FastReport.Data;
-using FrontLookCode;
+﻿
+using CliReportCompiler.ReportForm;
+using FastReport.Data;
+
 using FrontLookCoreDbAccessLibrary.Desktop.FL_RDLC;
-using FrontLookCoreDbAccessLibrary.FL_FastReport;
 using FrontLookCoreLibraryAssembly.FL_General;
 using Microsoft.Reporting.WinForms;
+using Microsoft.ReportViewer.Common.FrontLookCode;
+using Microsoft.ReportViewer.WinForms.FrontLookCode;
+using Namotion.Reflection;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -16,7 +20,7 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement.StartPanel;
 
 namespace CliReportCompiler
 {
-	/*
+    /*
 	usage example:
 	CliReportCompiler.exe --reportPath|-rp "C:\path\to\report.rdlc" --reportDataSource|-ds "C:\path\to\data.xml" --Parameters|-p "json Parameters" --ReportName|-rn "ReportName" --Mode|-m "Preview|Print|Export" --ExportFormat|-ef "PDF|Excel|Word|Image" --ExportPath|-ep "C:\path\to\exported\file" --test|-t "Msg"
 	*/
@@ -25,8 +29,8 @@ namespace CliReportCompiler
 
 
 
-	class Program
-	{
+    class Program
+    {
 
         static Dictionary<string, string> ParameterNames = new()
         {
@@ -50,7 +54,7 @@ Options:
   --ReportDataSource|-ds    Path to the data source file (should be in xml along with xml schema in single file).
   --ReportName|-rn          Name of the report.
   --Mode|-m                 Operation mode: Preview, Print, PrintSetup, or Export.
-  --ExportFormat|-ef        Export format: PDF, Excel, Word, or Image.
+  --ExportFormat|-ef        Export format: PDF, EXCEL, EXCELOPENXML, WORD, WORDOPENXML, IMAGE, HTML4_0, HTML5, MHTML
   --ExportPath|-ep          Path where the exported file will be saved.
   --PrintSetupFile|-psf     Path to the print setup file(JsonFile).
   --Test|-t                 Test message (for debugging purposes).
@@ -71,7 +75,18 @@ Example:
             // Here, you would create and show your form with the ReportViewer control.
             // This is a placeholder for the actual demo implementation.
             Console.WriteLine("Running demo...");
-            using var form = new ReportViewerForm(); // Ensure you have a form named ReportViewerForm with a ReportViewer control.
+
+            var report = new FL_IRdlcReport()
+            {
+                DataTables = File.ReadAllText(Path.Combine(Environment.CurrentDirectory, "DemoDataset.xml")).FL_CastXmlToDataSet(),
+                ReportFile = Path.Combine(Environment.CurrentDirectory, "DemoReport.rdlc"),
+                ReportName = "DemoReport.rdlc",
+                //PrintSettingFilePath = Path.Combine(Environment.CurrentDirectory, "DemoPrintSetup.json")
+            };
+
+
+
+            using var form = new ReportViewerForm(report); // Ensure you have a form named ReportViewerForm with a ReportViewer control.
             form.ShowDialog();
         }
 
@@ -167,8 +182,8 @@ Example:
         //PageSettings
 
         [STAThread]
-		static void Main(string[] args)
-		{
+        static void Main(string[] args)
+        {
             if (args.Length == 0)
             {
                 ParseArguments();
@@ -247,12 +262,38 @@ Example:
             var reportPath = GetParameters["ReportPath"];
             var dsFile = GetParameters["ReportDataSource"];
             var ds = File.ReadAllText(dsFile).FL_CastXmlToDataSet();
-            
+
             var reportName = GetParameters["ReportName"];
             var mode = GetParameters["Mode"];
             var printSetupFile = GetParameters["PrintSetupFile"];
 
 
+            if (ds.Tables.Count == 0)
+            {
+                throw new Exception("No data to load");
+            }
+
+            if (string.IsNullOrEmpty(reportPath))
+            {
+                throw new Exception("No report file to load");
+            }
+
+            if (!File.Exists(reportPath))
+            {
+                throw new Exception("Report file not found");
+            }
+
+            /*--ReportPath "G:\Repos\frontlook-admin\AccLead\AccLead.Desktop\bin\Debug\net8.0-windows\ReportTemplates\Reports\RDLC\FinalAccount\TrialBalanceReport\TrialBalanceReport.rdlc" --ReportDataSource "C:\Users\deban\AppData\Local\Temp\tmp2t0lpk.tmp" --ReportName "TrialBalanceReport.rdlc" --PrintSetupFile "G:\Repos\frontlook-admin\AccLead\AccLead.Desktop\bin\Debug\net8.0-windows\CompanyReportSettings\1DCA0B1D-83F4AC6F-FC5A1698-C134895E-0C85BD79-B9E13A3D-4340A34D-B5B7EF0D\AccLead-2324\PrintSettings\TrialBalanceReport\TrialBalanceReport.txt" --Mode "Print"*/
+
+            var rldcReportCompiler = new FL_IRdlcReport()
+            {
+                DataTables = File.ReadAllText(dsFile).FL_CastXmlToDataSet(),
+                ReportFile = reportPath,
+                ReportName = reportName,
+                PrintSettingFilePath = printSetupFile
+            };
+
+            /*
             var rldcReportCompiler = new FL_IRdlcReport()
             {
                 DataTables = ds,
@@ -260,10 +301,31 @@ Example:
                 ReportName = reportName,
                 PrintSettingFilePath = printSetupFile
             };
+            */
 
+            if (ds.Tables.Cast<DataTable>().Any(x => x.TableName == "RldcParameters"))
+            {
+                //load the parameters
+                var ParametersCount = ds.Tables["RldcParameters"].Rows.Count;
+                if (ParametersCount > 0)
+                {
+                    //load the parameters in rlcdReportCompiler
+                    rldcReportCompiler.ReportParameters = new List<FL_RdlcReportParameter>();
 
+                    for (int i = 0; i < ParametersCount; i++)
+                    {
+                        rldcReportCompiler.ReportParameters.Add(new FL_RdlcReportParameter()
+                        {
+                            Name = ds.Tables["RldcParameters"].Rows[i]["Name"].ToString(),
+                            Value = ds.Tables["RldcParameters"].Rows[i]["Value"]
+                        });
+                    }
+                }
+            }
+
+            
             //check file exists
-            if(!Directory.Exists(Path.GetDirectoryName(printSetupFile)))
+            if (!Directory.Exists(Path.GetDirectoryName(printSetupFile)))
             {
                 //create the directory
                 Directory.CreateDirectory(Path.GetDirectoryName(printSetupFile));
@@ -283,78 +345,87 @@ Example:
                     }
                 }
             }
+            
 
 
-
-
-            if (ds.Tables.Count == 0)
+            if (mode == "Preview" || mode == "PrintSetup")
             {
-                throw new Exception("No data to load");
-            }
-
-            if (string.IsNullOrEmpty(reportPath))
-            {
-                throw new Exception("No report file to load");
-            }
-
-            if (!File.Exists(reportPath))
-            {
-                throw new Exception("Report file not found");
-            }
-
-            if (ds.Tables.Cast<DataTable>().Any(x => x.TableName == "RldcParameters"))
-            {
-                //load the parameters
-                var ParametersCount = ds.Tables["RldcParameters"].Rows.Count;
-                if (ParametersCount > 0)
-                {
-                    //load the parameters in rlcdReportCompiler
-                    rldcReportCompiler.ReportParameters = new List<FL_RldcReportParameter>();
-
-                    for (int i = 0; i < ParametersCount; i++)
-                    {
-                        rldcReportCompiler.ReportParameters.Add(new FL_RldcReportParameter()
-                        {
-                            Name = ds.Tables["RldcParameters"].Rows[i]["Name"].ToString(),
-                            Value = ds.Tables["RldcParameters"].Rows[i]["Value"]
-                        });
-                    }
-                }
-            }
-
-
-            if (mode == "Preview")
-            {
-                rldcReportCompiler.Preview();
+                rldcReportCompiler.AltTriggerPrintSettings = mode == "PrintSetup";
+                //new ReportViewerForm(rldcReportCompiler).Show();
+                //rldcReportCompiler.Preview();
+                PreviewReport(rldcReportCompiler);
             }
             else if (mode == "Print")
             {
-                PrintReport();
+                //rldcReportCompiler.PrintToPrinter();
+                PrintReport(rldcReportCompiler);
             }
             else if (mode == "Export")
             {
-                ExportReport();
+                ExportReport(rldcReportCompiler);
+            }
+            else
+            {
+                throw new Exception("Invalid mode.");
             }
         }
 
-        static void PreviewReport()
+        static void PreviewReport(FL_IRdlcReport report)
         {
 
+            using var form = new FL_RdlcReportViewerForm(report); // Ensure you have a form named ReportViewerForm with a ReportViewer control.
+            form.ShowDialog();
         }
-        static void ExportReport()
-        {
-            var exportFormat = GetParameters["ExportFormat"];
-            var exportPath = GetParameters["ExportPath"];
-            var test = GetParameters["test"];
 
-            throw new NotImplementedException();
+        static ExportFormat GetExportFormat()
+        {
+            var getExportFormat = GetParameters["ExportFormat"];
+            if (string.IsNullOrEmpty(getExportFormat))
+            {
+                throw new Exception("ExportFormat is missing.");
+            }
+
+            return getExportFormat switch
+            {
+                "PDF" => ExportFormat.PDF,
+                "EXCEL" => ExportFormat.EXCEL,
+                "EXCELOPENXML" => ExportFormat.EXCELOPENXML,
+                "WORD" => ExportFormat.WORD,
+                "WORDOPENXML" => ExportFormat.WORDOPENXML,
+                "IMAGE" => ExportFormat.IMAGE,
+                "HTML4_0" => ExportFormat.HTML4_0,
+                "HTML5" => ExportFormat.HTML5,
+                "MHTML" => ExportFormat.MHTML,
+                _ => ExportFormat.PDF,
+            };
         }
-        static void PrintReport()
-        {
-            var exportPath = GetParameters["ExportPath"];
-            var test = GetParameters["test"];
 
-            throw new NotImplementedException();
+        static void ExportReport(FL_IRdlcReport report)
+        {
+            var getExportFormat = GetParameters["ExportFormat"];
+            if (string.IsNullOrEmpty(getExportFormat))
+            {
+                throw new Exception("ExportFormat is missing.");
+            }
+
+            ExportFormat exportFormat = ExportFormat.PDF;
+
+            using var LocalReport = report.GetLoadedReport();
+            lock (LocalReport)
+            {
+                report.ExportFileName = GetParameters["ExportPath"];
+                report.ExportFormat = GetExportFormat();
+            }
+        }
+
+        static void PrintReport(FL_IRdlcReport report)
+        {
+            using var LocalReport = report.GetLoadedReport();
+            lock (LocalReport)
+            {
+                LocalReport.PrintToPrinter(report.PrintSettings);
+            }
+
         }
 
     }

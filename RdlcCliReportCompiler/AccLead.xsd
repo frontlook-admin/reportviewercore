@@ -1,0 +1,121 @@
+<?xml version="1.0" standalone="yes"?>
+<xs:schema id="AccLeadReport" xmlns="" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+  <xs:element name="AccLeadReport" msdata:IsDataSet="true" msdata:UseCurrentLocale="true">
+    <xs:complexType>
+      <xs:choice minOccurs="0" maxOccurs="unbounded">
+        <xs:element name="CompanyInfos">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="CompanyId" type="xs:string" minOccurs="0" />
+              <xs:element name="CompanyName" type="xs:string" minOccurs="0" />
+              <xs:element name="CompanyNameWithSession" type="xs:string" minOccurs="0" />
+              <xs:element name="CompanyCode" type="xs:string" minOccurs="0" />
+              <xs:element name="Address1" type="xs:string" minOccurs="0" />
+              <xs:element name="Address2" type="xs:string" minOccurs="0" />
+              <xs:element name="Address3" type="xs:string" minOccurs="0" />
+              <xs:element name="City" type="xs:string" minOccurs="0" />
+              <xs:element name="Pincode" type="xs:string" minOccurs="0" />
+              <xs:element name="State" type="xs:string" minOccurs="0" />
+              <xs:element name="Country" type="xs:string" minOccurs="0" />
+              <xs:element name="Phone" type="xs:string" minOccurs="0" />
+              <xs:element name="Email" type="xs:string" minOccurs="0" />
+              <xs:element name="GstNo" type="xs:string" minOccurs="0" />
+              <xs:element name="AccountNumber" type="xs:string" minOccurs="0" />
+              <xs:element name="IfscCode" type="xs:string" minOccurs="0" />
+              <xs:element name="BankName" type="xs:string" minOccurs="0" />
+              <xs:element name="BankBranch" type="xs:string" minOccurs="0" />
+              <xs:element name="BankAddress" type="xs:string" minOccurs="0" />
+              <xs:element name="MicrCode" type="xs:string" minOccurs="0" />
+              <xs:element name="SwiftCode" type="xs:string" minOccurs="0" />
+              <xs:element name="DbName" type="xs:string" minOccurs="0" />
+              <xs:element name="CreatedOn" type="xs:dateTime" minOccurs="0" />
+              <xs:element name="SessionFrom" type="xs:dateTime" minOccurs="0" />
+              <xs:element name="SessionTo" type="xs:dateTime" minOccurs="0" />
+              <xs:element name="From" type="xs:dateTime" minOccurs="0" />
+              <xs:element name="To" type="xs:dateTime" minOccurs="0" />
+              <xs:element name="DataBaseStatus" type="xs:string" minOccurs="0" />
+              <xs:element name="ParentPosition" type="xs:long" minOccurs="0" />
+              <xs:element name="ParentCompanyId" type="xs:string" minOccurs="0" />
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="MGeneralLedgers">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="GlTypeName" type="xs:string" minOccurs="0" />
+              <xs:element name="GlGroupName" type="xs:string" minOccurs="0" />
+              <xs:element name="GlSubGroupName" type="xs:string" minOccurs="0" />
+              <xs:element name="FinalAccountLayout" type="xs:string" minOccurs="0" />
+              <xs:element name="GRArangeOrder" type="xs:int" minOccurs="0" />
+              <xs:element name="LiveBalance" type="xs:double" minOccurs="0" />
+              <xs:element name="CurrentBalance" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportOpeningBalanceMod" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportOpeningBalanceModDR" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportOpeningBalanceModCR" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportDateRangeBalanceMod" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportDateRangeBalanceModDR" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportDateRangeBalanceModCR" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportClosingBalanceMod" type="xs:double" minOccurs="0" />
+              <xs:element name="GlId" type="xs:long" minOccurs="0" />
+              <xs:element name="GlName" type="xs:string" minOccurs="0" />
+              <xs:element name="GlDescription" type="xs:string" minOccurs="0" />
+              <xs:element name="GlType" type="xs:int" minOccurs="0" />
+              <xs:element name="T_GlTypeName" type="xs:string" minOccurs="0" />
+              <xs:element name="GlGroup" type="xs:int" minOccurs="0" />
+              <xs:element name="T_GlGroupName" type="xs:string" minOccurs="0" />
+              <xs:element name="GlSubGroup" type="xs:int" minOccurs="0" />
+              <xs:element name="T_GlSubGroupName" type="xs:string" minOccurs="0" />
+              <xs:element name="EnableSubLedger" type="xs:boolean" minOccurs="0" />
+              <xs:element name="OpenningBalance" type="xs:double" minOccurs="0" />
+              <xs:element name="DrCr" type="xs:string" minOccurs="0" />
+              <xs:element name="Address1" type="xs:string" minOccurs="0" />
+              <xs:element name="Address2" type="xs:string" minOccurs="0" />
+              <xs:element name="Address3" type="xs:string" minOccurs="0" />
+              <xs:element name="City" type="xs:string" minOccurs="0" />
+              <xs:element name="State" type="xs:string" minOccurs="0" />
+              <xs:element name="Pin" type="xs:string" minOccurs="0" />
+              <xs:element name="PhoneNo" type="xs:string" minOccurs="0" />
+              <xs:element name="AltPhoneNo" type="xs:string" minOccurs="0" />
+              <xs:element name="Email" type="xs:string" minOccurs="0" />
+              <xs:element name="AltEmail" type="xs:string" minOccurs="0" />
+              <xs:element name="NameInBank" type="xs:string" minOccurs="0" />
+              <xs:element name="IFSCCODE" type="xs:string" minOccurs="0" />
+              <xs:element name="BankName" type="xs:string" minOccurs="0" />
+              <xs:element name="BranchAddress" type="xs:string" minOccurs="0" />
+              <xs:element name="Branch" type="xs:string" minOccurs="0" />
+              <xs:element name="MicrCode" type="xs:string" minOccurs="0" />
+              <xs:element name="SwiftCode" type="xs:string" minOccurs="0" />
+              <xs:element name="AccountNo" type="xs:string" minOccurs="0" />
+              <xs:element name="CanRemove" type="xs:boolean" minOccurs="0" />
+              <xs:element name="AddToModOpenningBalance" type="xs:double" minOccurs="0" />
+              <xs:element name="ModOpenningBalance" type="xs:double" minOccurs="0" />
+              <xs:element name="AddToReportOpeningBalanceMod" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportOpeningBalance" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportOpeningBalanceDRCR" type="xs:string" minOccurs="0" />
+              <xs:element name="AddToReportOpeningBalanceModDR" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportOpeningBalanceDR" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportOpeningBalanceDR_DRCR" type="xs:string" minOccurs="0" />
+              <xs:element name="AddToReportOpeningBalanceModCR" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportOpeningBalanceCR" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportOpeningBalanceCR_DRCR" type="xs:string" minOccurs="0" />
+              <xs:element name="AddToReportDateRangeBalanceMod" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportDateRangeBalance" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportDateRangeBalanceDRCR" type="xs:string" minOccurs="0" />
+              <xs:element name="AddToReportDateRangeBalanceModDR" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportDateRangeBalanceDR" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportDateRangeBalanceDR_DRCR" type="xs:string" minOccurs="0" />
+              <xs:element name="AddToReportDateRangeBalanceModCR" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportDateRangeBalanceCR" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportDateRangeBalanceCR_DRCR" type="xs:string" minOccurs="0" />
+              <xs:element name="AddToReportClosingBalanceMod" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportClosingBalance" type="xs:double" minOccurs="0" />
+              <xs:element name="ReportClosingBalanceDRCR" type="xs:string" minOccurs="0" />
+              <xs:element name="ReportFrom" type="xs:dateTime" minOccurs="0" />
+              <xs:element name="ReportTo" type="xs:dateTime" minOccurs="0" />
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
