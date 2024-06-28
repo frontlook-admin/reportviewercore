@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace Microsoft.Reporting.WinForms
 {
@@ -130,6 +131,11 @@ namespace Microsoft.Reporting.WinForms
 		{
 			PageCountMode pageCountMode;
 			return GetTotalPages(out pageCountMode);
+		}
+
+        public async Task<byte[]> RenderAsync(string format)
+		{
+			return await Task.Run(() => Render(format));
 		}
 
 		public byte[] Render(string format)

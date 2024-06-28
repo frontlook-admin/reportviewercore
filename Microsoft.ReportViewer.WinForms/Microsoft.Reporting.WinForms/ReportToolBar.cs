@@ -47,6 +47,8 @@ namespace Microsoft.Reporting.WinForms
         private ToolStripButton DirectPrint;
         private ToolStripButton zoomIn;
         private ToolStripButton zoomOut;
+        private ToolStripButton toolStripButton1;
+        private ToolStripButton printerPageSettings;
         private ToolStripDropDownButton export;
 
         public override Size MinimumSize
@@ -104,6 +106,8 @@ namespace Microsoft.Reporting.WinForms
         public event EventHandler Print;
 
         public event EventHandler DPrint;
+
+        public event EventHandler PrinterPageSettings;
 
         public event EventHandler Back;
 
@@ -222,6 +226,7 @@ namespace Microsoft.Reporting.WinForms
             PrintDialog = new ToolStripButtonOverride();
             printPreview = new ToolStripButtonOverride();
             pageSetup = new ToolStripButtonOverride();
+            printerPageSettings = new ToolStripButton();
             export = new ToolStripDropDownButton();
             separator4 = new ToolStripSeparator();
             zoomIn = new ToolStripButton();
@@ -336,7 +341,7 @@ namespace Microsoft.Reporting.WinForms
             toolStrip1.AccessibleName = "Toolstrip";
             toolStrip1.Dock = DockStyle.Fill;
             toolStrip1.GripStyle = ToolStripGripStyle.Hidden;
-            toolStrip1.Items.AddRange(new ToolStripItem[] { firstPage, previousPage, currentPage, labelOf, totalPages, nextPage, lastPage, toolStripSeparator2, back, stop, refresh, toolStripSeparator3, DirectPrint, PrintDialog, printPreview, pageSetup, export, separator4, zoomIn, zoom, zoomOut, textToFind, find, toolStripSeparator4, findNext });
+            toolStrip1.Items.AddRange(new ToolStripItem[] { firstPage, previousPage, currentPage, labelOf, totalPages, nextPage, lastPage, toolStripSeparator2, back, stop, refresh, toolStripSeparator3, DirectPrint, PrintDialog, printPreview, pageSetup, printerPageSettings, export, separator4, zoomIn, zoom, zoomOut, textToFind, find, toolStripSeparator4, findNext });
             toolStrip1.Location = new Point(0, 0);
             toolStrip1.Name = "toolStrip1";
             toolStrip1.RenderMode = ToolStripRenderMode.Professional;
@@ -386,6 +391,16 @@ namespace Microsoft.Reporting.WinForms
             pageSetup.Size = new Size(23, 22);
             pageSetup.Click += OnPageSetupClick;
             // 
+            // printerPageSettings
+            // 
+            printerPageSettings.DisplayStyle = ToolStripItemDisplayStyle.Image;
+            printerPageSettings.Image = (Image)resources.GetObject("printerPageSettings.Image");
+            printerPageSettings.ImageTransparentColor = Color.Magenta;
+            printerPageSettings.Name = "printerPageSettings";
+            printerPageSettings.Size = new Size(23, 22);
+            printerPageSettings.Text = "Printer & Page Settings";
+            printerPageSettings.Click += OnPrinterPageSettings_Click;
+            // 
             // export
             // 
             export.DisplayStyle = ToolStripItemDisplayStyle.Image;
@@ -409,7 +424,7 @@ namespace Microsoft.Reporting.WinForms
             zoomIn.Name = "zoomIn";
             zoomIn.Size = new Size(23, 22);
             zoomIn.Text = "toolStripButton2";
-            zoomIn.Click += zoomIn_Click;
+            zoomIn.Click += OnZoomIn_Click;
             // 
             // zoom
             // 
@@ -428,7 +443,7 @@ namespace Microsoft.Reporting.WinForms
             zoomOut.Name = "zoomOut";
             zoomOut.Size = new Size(23, 22);
             zoomOut.Text = "toolStripButton1";
-            zoomOut.Click += zoomOut_Click;
+            zoomOut.Click += OnZoomOut_Click;
             // 
             // textToFind
             // 
@@ -485,7 +500,7 @@ namespace Microsoft.Reporting.WinForms
             }
         }
 
-        private void zoomIn_Click(object sender, EventArgs e)
+        private void OnZoomIn_Click(object sender, EventArgs e)
         {
             if (!m_ignoreZoomEvents && this.ZoomChange != null)
             {
@@ -511,7 +526,7 @@ namespace Microsoft.Reporting.WinForms
             }
         }
 
-        private void zoomOut_Click(object sender, EventArgs e)
+        private void OnZoomOut_Click(object sender, EventArgs e)
         {
             if (!m_ignoreZoomEvents && this.ZoomChange != null)
             {
@@ -580,11 +595,22 @@ namespace Microsoft.Reporting.WinForms
             }
         }
 
+        private void OnPrinterPageSettings_Click(object sender, EventArgs e)
+        {
+            if (this.Print != null)
+            {
+                toolStrip1.Capture = false;
+
+                this.PrinterPageSettings(this, EventArgs.Empty);
+            }
+        }
+
         private void OnDPrint(object sender, EventArgs e)
         {
             if (this.Print != null)
             {
                 toolStrip1.Capture = false;
+
                 this.DPrint(this, EventArgs.Empty);
             }
         }
@@ -811,6 +837,5 @@ namespace Microsoft.Reporting.WinForms
                 e.Handled = true;
             }
         }
-
     }
 }

@@ -70,7 +70,7 @@ namespace Microsoft.ReportingServices.ReportProcessing
 						{
 							for (int i = 0; i < parameterInfo.Values.Length; i++)
 							{
-								nameValueCollection.Add(parameterInfo.Name, parameterInfo.CastToString(parameterInfo.Values[i], Localization.ClientPrimaryCulture));
+								nameValueCollection.Add(parameterInfo.Name, parameterInfo.FL_CastToString(parameterInfo.Values[i], Localization.ClientPrimaryCulture));
 							}
 						}
 					}

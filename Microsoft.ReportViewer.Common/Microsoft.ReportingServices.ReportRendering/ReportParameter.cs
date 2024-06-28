@@ -62,7 +62,7 @@ namespace Microsoft.ReportingServices.ReportRendering
 					{
 						stringBuilder.Append(", ");
 					}
-					stringBuilder.Append(m_underlyingParam.CastToString(m_underlyingParam.Values[i], Localization.ClientPrimaryCulture));
+					stringBuilder.Append(m_underlyingParam.FL_CastToString(m_underlyingParam.Values[i], Localization.ClientPrimaryCulture));
 				}
 				return stringBuilder.ToString();
 			}

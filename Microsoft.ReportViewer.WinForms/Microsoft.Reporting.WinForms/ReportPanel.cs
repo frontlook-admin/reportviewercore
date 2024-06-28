@@ -741,6 +741,11 @@ namespace Microsoft.Reporting.WinForms
 
 		private ToolStripMenuItem m_printToolStripMenuItem;
 
+
+		private ToolStripMenuItem m_dprintToolStripMenuItem;
+
+		private ToolStripMenuItem m_printerPageSettingsToolStripMenuItem;
+
 		private ToolStripMenuItem m_printLayoutToolStripMenuItem;
 
 		private ToolStripMenuItem m_exportToolStripMenuItem;
@@ -748,6 +753,8 @@ namespace Microsoft.Reporting.WinForms
 		private ToolStripMenuItem m_stopToolStripMenuItem;
 
 		private ToolStripMenuItem m_zoomToolStripMenuItem;
+		private ToolStripMenuItem m_zoomInToolStripMenuItem;
+		private ToolStripMenuItem m_zoomOutToolStripMenuItem;
 
 		private ToolStripMenuItem m_pageSetupToolStripMenuItem;
 
@@ -827,6 +834,8 @@ namespace Microsoft.Reporting.WinForms
 		public event EventHandler DPrint;
 
 		public event EventHandler PageSettings;
+
+		public event EventHandler PrinterPageSettings;
 
 		public event ExportEventHandler Export;
 
@@ -1115,24 +1124,32 @@ namespace Microsoft.Reporting.WinForms
 			m_backToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
 			m_refreshToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
 			m_printToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+			m_dprintToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
 			m_printLayoutToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
 			m_pageSetupToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+			m_printerPageSettingsToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
 			m_exportToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
 			m_stopToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
 			m_zoomToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+			m_zoomInToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+			m_zoomOutToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
 			m_contextMenu.SuspendLayout();
 			SuspendLayout();
-			m_contextMenu.Items.AddRange(new System.Windows.Forms.ToolStripItem[9]
+			m_contextMenu.Items.AddRange(new System.Windows.Forms.ToolStripItem[13]
 			{
 				m_documentMapToolStripMenuItem,
 				m_backToolStripMenuItem,
 				m_refreshToolStripMenuItem,
+				m_dprintToolStripMenuItem,
 				m_printToolStripMenuItem,
 				m_printLayoutToolStripMenuItem,
 				m_pageSetupToolStripMenuItem,
+				m_printerPageSettingsToolStripMenuItem,
 				m_exportToolStripMenuItem,
 				m_stopToolStripMenuItem,
-				m_zoomToolStripMenuItem
+				m_zoomInToolStripMenuItem,
+				m_zoomToolStripMenuItem,
+				m_zoomOutToolStripMenuItem
 			});
 			m_contextMenu.Name = "contextMenu";
 			m_contextMenu.Size = new System.Drawing.Size(158, 202);
@@ -1152,6 +1169,9 @@ namespace Microsoft.Reporting.WinForms
 			m_printToolStripMenuItem.Name = "m_printToolStripMenuItem";
 			m_printToolStripMenuItem.Size = new System.Drawing.Size(157, 22);
 			m_printToolStripMenuItem.Text = "Print <replaced by resource>";
+			m_dprintToolStripMenuItem.Name = "m_dprintToolStripMenuItem";
+			m_dprintToolStripMenuItem.Size = new System.Drawing.Size(157, 22);
+			m_dprintToolStripMenuItem.Text = "Direct Print <replaced by resource>";
 			m_printLayoutToolStripMenuItem.CheckOnClick = true;
 			m_printLayoutToolStripMenuItem.Name = "m_printLayoutToolStripMenuItem";
 			m_printLayoutToolStripMenuItem.Size = new System.Drawing.Size(157, 22);
@@ -1159,16 +1179,25 @@ namespace Microsoft.Reporting.WinForms
 			m_pageSetupToolStripMenuItem.Name = "m_pageSetupToolStripMenuItem";
 			m_pageSetupToolStripMenuItem.Size = new System.Drawing.Size(157, 22);
 			m_pageSetupToolStripMenuItem.Text = "Page Setup <replaced by resource>";
+			m_printerPageSettingsToolStripMenuItem.Name = "m_printerPageSettingsToolStripMenuItem";
+            m_printerPageSettingsToolStripMenuItem.Size = new System.Drawing.Size(157, 22);
+            m_printerPageSettingsToolStripMenuItem.Text = "Printer & Page Setup <replaced by resource>";
 			m_exportToolStripMenuItem.Name = "m_exportToolStripMenuItem";
 			m_exportToolStripMenuItem.Size = new System.Drawing.Size(157, 22);
 			m_exportToolStripMenuItem.Text = "Export <replaced by resource>";
 			m_stopToolStripMenuItem.Name = "m_stopToolStripMenuItem";
 			m_stopToolStripMenuItem.Size = new System.Drawing.Size(157, 22);
 			m_stopToolStripMenuItem.Text = "Stop <replaced by resource>";
-			m_zoomToolStripMenuItem.Name = "m_zoomToolStripMenuItem";
+            m_zoomInToolStripMenuItem.Name = "m_zoomInToolStripMenuItem";
+            m_zoomInToolStripMenuItem.Size = new System.Drawing.Size(157, 22);
+            m_zoomInToolStripMenuItem.Text = "Zoom In <replaced by resource>";
+            m_zoomToolStripMenuItem.Name = "m_zoomToolStripMenuItem";
 			m_zoomToolStripMenuItem.Size = new System.Drawing.Size(157, 22);
 			m_zoomToolStripMenuItem.Text = "Zoom <replaced by resource>";
-			ContextMenuStrip = m_contextMenu;
+            m_zoomOutToolStripMenuItem.Name = "m_zoomOutToolStripMenuItem";
+            m_zoomOutToolStripMenuItem.Size = new System.Drawing.Size(157, 22);
+            m_zoomOutToolStripMenuItem.Text = "Zoom Out <replaced by resource>";
+            ContextMenuStrip = m_contextMenu;
 			m_contextMenu.ResumeLayout(false);
 			ResumeLayout(false);
 		}
@@ -1693,9 +1722,11 @@ namespace Microsoft.Reporting.WinForms
 			m_backToolStripMenuItem.Enabled = currentStatus.CanNavigateBack;
 			m_refreshToolStripMenuItem.Enabled = currentStatus.CanRefreshData;
 			m_printToolStripMenuItem.Enabled = currentStatus.CanPrint;
-			m_printLayoutToolStripMenuItem.Enabled = currentStatus.CanChangeDisplayModes;
+            m_dprintToolStripMenuItem.Enabled = m_printToolStripMenuItem.Enabled;
+            m_printLayoutToolStripMenuItem.Enabled = currentStatus.CanChangeDisplayModes;
 			m_printLayoutToolStripMenuItem.Checked = (reportViewer.DisplayMode == DisplayMode.PrintLayout);
 			m_pageSetupToolStripMenuItem.Enabled = m_printToolStripMenuItem.Enabled;
+            m_printerPageSettingsToolStripMenuItem.Enabled = m_pageSetupToolStripMenuItem.Enabled;
 			m_exportToolStripMenuItem.Enabled = currentStatus.CanExport;
 			m_stopToolStripMenuItem.Enabled = currentStatus.InCancelableOperation;
 			m_zoomToolStripMenuItem.Enabled = currentStatus.CanChangeZoom;
@@ -1708,6 +1739,8 @@ namespace Microsoft.Reporting.WinForms
 			m_exportToolStripMenuItem.Visible = reportViewer.ShowExportButton;
 			m_stopToolStripMenuItem.Visible = reportViewer.ShowStopButton;
 			m_zoomToolStripMenuItem.Visible = reportViewer.ShowZoomControl;
+			m_zoomInToolStripMenuItem.Visible = m_zoomToolStripMenuItem.Visible;
+			m_zoomOutToolStripMenuItem.Visible = m_zoomToolStripMenuItem.Visible;
 		}
 
 		public void RenderToGraphics(Graphics g, bool testMode)

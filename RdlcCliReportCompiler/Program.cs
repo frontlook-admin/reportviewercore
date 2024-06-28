@@ -68,6 +68,8 @@ Example:
   CliReportCompiler.exe --reportPath ""C:\path\to\report.rdlc"" --reportDataSource ""C:\path\to\data.xml"" --PrintSetupFile ""C:\path\to\printsetup.json""  --Parameters ""json Parameters"" --ReportName ""ReportName"" --Mode ""Preview"" --ExportFormat ""PDF"" --ExportPath ""C:\path\to\exported\file"" --test ""Msg""
   CliReportCompiler --help".FL_ConsoleWriteDebug();
         }
+        /*--ReportPath "G:\Repos\frontlook-admin\AccLead\AccLead.Desktop\bin\Debug\net8.0-windows\ReportTemplates\Reports\RDLC\FinalAccount\TrialBalanceReport\TrialBalanceReport.rdlc" --ReportDataSource "C:\Users\deban\AppData\Local\Temp\tmp2t0lpk.tmp" --ReportName "TrialBalanceReport.rdlc" --PrintSetupFile "G:\Repos\frontlook-admin\AccLead\AccLead.Desktop\bin\Debug\net8.0-windows\CompanyReportSettings\1DCA0B1D-83F4AC6F-FC5A1698-C134895E-0C85BD79-B9E13A3D-4340A34D-B5B7EF0D\AccLead-2324\PrintSettings\TrialBalanceReport\TrialBalanceReport.txt" --Mode "Print"*/
+
 
 
         static void RunDemo()
@@ -257,7 +259,8 @@ Example:
 
         static void ProcessReport()
         {
-            //--ReportPath "G:\Repos\frontlook-admin\AccLead\AccLead.Desktop\bin\Debug\net8.0-windows\ReportTemplates\Reports\RDLC\FinalAccount\TrialBalanceReport\TrialBalanceReport.rdlc" --ReportDataSource "C:\Users\deban\AppData\Local\Temp\tmp3kczp5.tmp" --ReportName "TrialBalanceReport.rdlc" --Mode "Preview"
+            
+
 
             var reportPath = GetParameters["ReportPath"];
             var dsFile = GetParameters["ReportDataSource"];
@@ -283,7 +286,7 @@ Example:
                 throw new Exception("Report file not found");
             }
 
-            /*--ReportPath "G:\Repos\frontlook-admin\AccLead\AccLead.Desktop\bin\Debug\net8.0-windows\ReportTemplates\Reports\RDLC\FinalAccount\TrialBalanceReport\TrialBalanceReport.rdlc" --ReportDataSource "C:\Users\deban\AppData\Local\Temp\tmp2t0lpk.tmp" --ReportName "TrialBalanceReport.rdlc" --PrintSetupFile "G:\Repos\frontlook-admin\AccLead\AccLead.Desktop\bin\Debug\net8.0-windows\CompanyReportSettings\1DCA0B1D-83F4AC6F-FC5A1698-C134895E-0C85BD79-B9E13A3D-4340A34D-B5B7EF0D\AccLead-2324\PrintSettings\TrialBalanceReport\TrialBalanceReport.txt" --Mode "Print"*/
+            
 
             var rldcReportCompiler = new FL_IRdlcReport()
             {

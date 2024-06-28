@@ -9,7 +9,7 @@ using System.Windows.Forms;
 using System.IO;
 using Microsoft.Reporting.WinForms;
 
-namespace FrontLookCode
+namespace Microsoft.ReportViewer.WinForms.FrontLookCode
 {
 
     public enum PrintType
@@ -31,23 +31,53 @@ namespace FrontLookCode
             Margins = pageSettings.Margins;
             PaperSource = pageSettings.PaperSource;
             PrinterResolution = pageSettings.PrinterResolution;
+            PaperSize = pageSettings.PaperSize;
         }
 
         public bool Color { get; set; }
         public bool Landscape { get; set; }
         public PaperSize PaperSize { get; set; }
+        //private static double MarginConversion = 0.394;
+        private static double MarginConversion = (1/2.54);
         public Margins Margins { get; set; }
         public PaperSource PaperSource { get; set; }
         public PrinterResolution PrinterResolution { get; set; }
 
         public PageSettings GetPageSettings()
         {
+
             return new PageSettings()
             {
                 Color = Color,
                 Landscape = Landscape,
                 PaperSize = PaperSize,
                 Margins = Margins,
+                PaperSource = PaperSource,
+                PrinterResolution = PrinterResolution
+            };
+
+        }
+        public PageSettings GetSetupPageSettings()
+        {
+            var m = new Margins();
+            var Top = ((double)Margins.Top)/MarginConversion;
+            var Bottom = ((double)Margins.Bottom) / MarginConversion;
+            var Left = ((double)Margins.Left) / MarginConversion;
+            var Right = ((double)Margins.Right) / MarginConversion;
+
+            m.Top = (int)Top;
+            m.Bottom = (int)Bottom;
+            m.Left = (int)Left;
+            m.Right = (int)Right;
+
+
+
+            return new PageSettings()
+            {
+                Color = Color,
+                Landscape = Landscape,
+                PaperSize = PaperSize,
+                Margins = m,
                 PaperSource = PaperSource,
                 PrinterResolution = PrinterResolution
             };
@@ -114,7 +144,6 @@ namespace FrontLookCode
                 Landscape = pageSettings.Landscape;
             }
 
-            CPageSettings = new CustomPageSetting(pageSettings);
             CPageSettings = new CustomPageSetting(pageSettings);
         }
 
@@ -189,6 +218,11 @@ namespace FrontLookCode
         {
             GetPrintDialog();
             return CPageSettings.GetPageSettings();
+        }
+        public virtual PageSettings GetSetupPageSettings()
+        {
+            GetPrintDialog();
+            return CPageSettings.GetSetupPageSettings();
         }
 
         public virtual PrintDialog GetPrintDialog()

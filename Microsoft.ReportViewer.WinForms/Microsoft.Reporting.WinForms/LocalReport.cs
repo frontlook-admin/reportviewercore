@@ -1185,7 +1185,7 @@ namespace Microsoft.Reporting.WinForms
 				array2 = new string[paramInfo.Values.Length];
 				for (int j = 0; j < paramInfo.Values.Length; j++)
 				{
-					array2[j] = paramInfo.CastToString(paramInfo.Values[j], CultureInfo.CurrentCulture);
+					array2[j] = paramInfo.FL_CastToString(paramInfo.Values[j], CultureInfo.CurrentCulture);
 				}
 			}
 			List<ValidValue> list = null;
@@ -1194,7 +1194,7 @@ namespace Microsoft.Reporting.WinForms
 				list = new List<ValidValue>(paramInfo.ValidValues.Count);
 				foreach (Microsoft.ReportingServices.ReportProcessing.ValidValue validValue in paramInfo.ValidValues)
 				{
-					string value = paramInfo.CastToString(validValue.Value, CultureInfo.CurrentCulture);
+					string value = paramInfo.FL_CastToString(validValue.Value, CultureInfo.CurrentCulture);
 					list.Add(new ValidValue(validValue.Label, value));
 				}
 			}

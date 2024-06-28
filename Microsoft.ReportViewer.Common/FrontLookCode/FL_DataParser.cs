@@ -7,7 +7,7 @@ using System.Xml;
 using Newtonsoft.Json;
 using NFormatting = Newtonsoft.Json.Formatting;
 
-namespace FrontLookCode
+namespace Microsoft.ReportViewer.Common.FrontLookCode
 {
     public static class FL_DataParser
     {

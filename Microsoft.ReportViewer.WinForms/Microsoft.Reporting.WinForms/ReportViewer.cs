@@ -1,7 +1,9 @@
-using FrontLookCode;
+using FrontLookCoreLibraryAssembly.FL_General;
 using Microsoft.ReportingServices.Common;
 using Microsoft.ReportingServices.Interfaces;
 using Microsoft.ReportingServices.Rendering.SPBProcessing;
+using Microsoft.ReportViewer.Common.FrontLookCode;
+using Microsoft.ReportViewer.WinForms.FrontLookCode;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -936,6 +938,27 @@ namespace Microsoft.Reporting.WinForms
 				UpdateUIState(e2);
 			}
 		}
+
+		private void OnPrinterPageSettings(object sender, EventArgs e)
+		{
+			try
+			{
+				ReportPrintEventArgs reportPrintEventArgs = new ReportPrintEventArgs(CreateDefaultPrintSettings());
+				if (this.Print != null)
+				{
+					this.Print(this, reportPrintEventArgs);
+				}
+				if (!reportPrintEventArgs.Cancel)
+				{
+                    SetPrinterAndPageSettings();
+				}
+			}
+			catch (Exception e2)
+			{
+				UpdateUIState(e2);
+			}
+		}
+
 		private void OnDPrint(object sender, EventArgs e)
 		{
 			try
@@ -1226,6 +1249,7 @@ namespace Microsoft.Reporting.WinForms
 			winRSviewer.ReportRefresh += new System.EventHandler(OnRefresh);
 			winRSviewer.PageSettings += new System.EventHandler(OnPageSetup);
 			winRSviewer.Print += new System.EventHandler(OnPrint);
+			winRSviewer.PrinterPageSettings += new System.EventHandler(OnPrinterPageSettings);
 			winRSviewer.DPrint += new System.EventHandler(OnDPrint);
 			winRSviewer.Export += new Microsoft.Reporting.WinForms.ExportEventHandler(OnExport);
 			winRSviewer.Back += new System.EventHandler(OnBack);
@@ -1238,6 +1262,7 @@ namespace Microsoft.Reporting.WinForms
 			reportToolBar.PageSetup += new System.EventHandler(OnPageSetup);
 			reportToolBar.Print += new System.EventHandler(OnPrint);
 			reportToolBar.DPrint += new System.EventHandler(OnDPrint);
+			reportToolBar.PrinterPageSettings += new System.EventHandler(OnPrinterPageSettings);
 			reportToolBar.Export += new Microsoft.Reporting.WinForms.ExportEventHandler(OnExport);
 			reportToolBar.Search += new Microsoft.Reporting.WinForms.SearchEventHandler(OnSearch);
 			reportToolBar.Back += new System.EventHandler(OnBack);
@@ -1834,22 +1859,57 @@ namespace Microsoft.Reporting.WinForms
 		}
 
 		public string PrintSettingFilePath { get; set; }
+		public CustomPrintDialog CustomPrintDialog { get; set; }
 
 		// save print settings for next time
-		public void SavePrintSetting(PrintDialog settings)
+		public void SavePrintSetting()
         {
-			if (PrintSettingFilePath == null)
+			if (PrintSettingFilePath == null || CustomPrintDialog == null)
 			{
 				return;
             
 			}
 			else
 			{
-				File.WriteAllText(PrintSettingFilePath, new CustomPrintDialog(settings).CastToJson());
+				File.WriteAllText(PrintSettingFilePath, CustomPrintDialog.FL_CastToJson());
 			}
 
         }
 
+		public void SetPrinterAndPageSettings()
+        {
+			if (PrintSettingFilePath == null)
+			{
+				MessageBox.Show("Print Setting File Path is not set");
+			}
+			else
+			{
+
+                PageSetupDialog();
+
+                var pageSetting = GetPageSettings();
+                CustomPrintDialog = new CustomPrintDialog(PrinterSettings, pageSetting);
+                var pd = CustomPrintDialog?.GetPrintDialog();
+
+                pd.PrinterSettings.DefaultPageSettings.PaperSize = pageSetting.PaperSize;
+                pd.PrinterSettings.DefaultPageSettings.Landscape = pageSetting.Landscape;
+                pd.PrinterSettings.DefaultPageSettings.Margins = pageSetting.Margins;
+                pd.PrinterSettings.DefaultPageSettings.Color = pageSetting.Color;
+                pd.PrinterSettings.DefaultPageSettings.PaperSource = pageSetting.PaperSource;
+                pd.PrinterSettings.DefaultPageSettings.PrinterResolution = pageSetting.PrinterResolution;
+                pd.ShowDialog();
+
+                PrinterSettings = pd.PrinterSettings;
+
+                //update the page settings and printersettings in reportcompiler
+                CustomPrintDialog = new CustomPrintDialog(pd, pageSetting);
+				SavePrintSetting();
+
+                RefreshReport();
+            }
+        }
+
+		//Check For Error in DirectPrint by FrontLook
 		public void DPrint()
 		{
 			//check if print setting file exists
@@ -1861,15 +1921,29 @@ namespace Microsoft.Reporting.WinForms
 			{
 				if(File.Exists(PrintSettingFilePath))
                 {
-                    //var printerSettings = new PrinterSettings();
-					var printSettingsTxt = File.ReadAllText(PrintSettingFilePath);
-                    var pd = printSettingsTxt.CastToClass<CustomPrintDialog>().GetPrintDialog();
+					//var printerSettings = new PrinterSettings();
+					bool DefaultPrint = false;
+					var ps = new CustomPrintDialog();
+					if (!File.Exists(PrintSettingFilePath))
+					{
+						DefaultPrint = true;
 
-					if (pd == null)
+                    }
+					else
+					{
+
+                        var printSettingsTxt = File.ReadAllText(PrintSettingFilePath);
+                        ps = printSettingsTxt.FL_CastToClass<CustomPrintDialog>();
+                    }
+
+                    if (ps == null || DefaultPrint)
 					{
 						DefaultPrintMode();
+						//set default print settings
+						ps = new CustomPrintDialog(PrinterSettings, GetPageSettings());
                     }
-					var printerSettings = pd.PrinterSettings;
+					var printerSettings = ps.GetPrinterSettings();
+					SetPageSettings(ps.CPageSettings.GetPageSettings());
                     if (OnPrintingBegin(this, printerSettings))
                     {
                         string displayNameForUse = Report.DisplayNameForUse;
@@ -1967,7 +2041,7 @@ namespace Microsoft.Reporting.WinForms
 						ReportPrintDocument reportPrintDocument = new ReportPrintDocument(CurrentReport.FileManager, (PageSettings)PageSettings.Clone());
 						reportPrintDocument.DocumentName = displayNameForUse;
 						reportPrintDocument.PrinterSettings = printDialog.PrinterSettings;
-						SavePrintSetting(printDialog);
+						//SavePrintSetting(printDialog);
 						reportPrintDocument.Print();
 						return dialogResult;
 					}
@@ -2310,10 +2384,31 @@ namespace Microsoft.Reporting.WinForms
 			}
 			using (PageSetupDialog pageSetupDialog = new PageSetupDialog())
 			{
+
+
 				pageSetupDialog.AllowPrinter = true;
 				pageSetupDialog.EnableMetric = true;
-				pageSetupDialog.PrinterSettings = PrinterSettings;
-				pageSetupDialog.PageSettings = (PageSettings)PageSettings.Clone();
+
+                if (!string.IsNullOrEmpty(PrintSettingFilePath) && !string.IsNullOrEmpty(File.ReadAllText(PrintSettingFilePath)))
+                {
+                    var ps = File.ReadAllText(PrintSettingFilePath).FL_CastToClass<CustomPrintDialog>();
+                    if (ps != null)
+                    {
+						pageSetupDialog.PrinterSettings = ps.GetPrinterSettings();
+						pageSetupDialog.PageSettings = ps.GetSetupPageSettings();
+                        PrinterSettings = pageSetupDialog.PrinterSettings;
+                    }
+					else
+					{
+                        pageSetupDialog.PrinterSettings = PrinterSettings;
+                        pageSetupDialog.PageSettings = (PageSettings)PageSettings.Clone();
+                    }
+                }
+				else
+                {
+                    pageSetupDialog.PrinterSettings = PrinterSettings;
+                    pageSetupDialog.PageSettings = (PageSettings)PageSettings.Clone();
+                }
 				DialogResult num = pageSetupDialog.ShowDialog(this);
 				if (num == DialogResult.OK)
 				{

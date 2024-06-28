@@ -144,6 +144,18 @@ namespace Microsoft.Reporting.WinForms
 			}
 		}
 
+		public event EventHandler PrinterPageSettings
+        {
+			add
+			{
+				m_reportPanel.PrinterPageSettings += value;
+			}
+			remove
+			{
+				m_reportPanel.PrinterPageSettings -= value;
+			}
+		}
+
 		public event EventHandler PageSettings
 		{
 			add
