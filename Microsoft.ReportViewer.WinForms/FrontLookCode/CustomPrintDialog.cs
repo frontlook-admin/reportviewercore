@@ -4,11 +4,11 @@ using System.Drawing.Printing;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using FrontLookCoreLibraryAssembly.FL_General;
 using System.Windows.Forms;
 using System.IO;
 using Microsoft.Reporting.WinForms;
 using System.Text.Json.Serialization;
+using Microsoft.ReportViewer.Common.FrontLookCode;
 
 namespace Microsoft.ReportViewer.WinForms.FrontLookCode
 {
@@ -40,7 +40,7 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
         //public bool? MetricEnabled { get; set; }
         public PaperSize PaperSize { get; set; }
         //private static double MarginConversion = 0.394;
-        private static double MarginConversion = (1/2.54);
+        private static double MarginConversion = (1 / 2.54);
         public Margins Margins { get; set; }
 
         //[JsonIgnore]
@@ -83,8 +83,9 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
 
                 return m;
             }
-            catch { 
-                return Margins; 
+            catch
+            {
+                return Margins;
             }
         }
 
@@ -205,7 +206,7 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
 
         public CustomPrintDialog(string JsonData)
         {
-            var printDialog = JsonData.FL_CastToClass<CustomPrintDialog>();
+            var printDialog = JsonData.CastToClass<CustomPrintDialog>();
             PrinterName = printDialog.PrinterName;
             AllowSomePages = printDialog.AllowSomePages;
             AllowSelection = printDialog.AllowSelection;
@@ -240,7 +241,7 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
 
         public virtual string GetJsonData()
         {
-            return this.FL_CastToJson();
+            return this.CastToJson();
         }
 
         public virtual PrinterSettings GetPrinterSettings()
@@ -291,7 +292,7 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
                 }
                 else
                 {
-                    if(CPageSettings == null)
+                    if (CPageSettings == null)
                     {
 
                         if (PaperSize == null)

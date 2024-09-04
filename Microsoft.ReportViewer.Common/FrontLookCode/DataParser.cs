@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -9,7 +11,7 @@ using NFormatting = Newtonsoft.Json.Formatting;
 
 namespace Microsoft.ReportViewer.Common.FrontLookCode
 {
-    public static class FL_DataParser
+    public static class DataParser
     {
         /// <summary>
         /// Converts a JSON string to an object of the specified type.
@@ -89,6 +91,17 @@ namespace Microsoft.ReportViewer.Common.FrontLookCode
 
                 return JsonConvert.SerializeObject(t, settings);
             }
+        }
+
+
+        public static DataSet CastXmlToDataSet(this string xml)
+        {
+            var dataSet = new DataSet();
+            using (var reader = new StringReader(xml))
+            {
+                dataSet.ReadXml(reader);
+            }
+            return dataSet;
         }
     }
 

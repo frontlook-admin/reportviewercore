@@ -1,10 +1,9 @@
-using FrontLookCoreLibraryAssembly.FL_General;
+
 using Microsoft.ReportingServices.Common;
 using Microsoft.ReportingServices.Interfaces;
 using Microsoft.ReportingServices.Rendering.SPBProcessing;
 using Microsoft.ReportViewer.Common.FrontLookCode;
 using Microsoft.ReportViewer.WinForms.FrontLookCode;
-using NPOI.OpenXmlFormats.Dml.Chart;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -1898,7 +1897,7 @@ namespace Microsoft.Reporting.WinForms
             }
             else
             {
-                File.WriteAllText(PrintSettingFilePath, CustomPrintDialog.FL_CastToJson());
+                File.WriteAllText(PrintSettingFilePath, CustomPrintDialog.CastToJson());
             }
 
         }
@@ -1956,7 +1955,7 @@ namespace Microsoft.Reporting.WinForms
                         if (!string.IsNullOrEmpty(PrintSettingFilePath))
                         {
                             //update the compiler print settings file
-                            var json = _PrintSettings.FL_CastToJson();
+                            var json = _PrintSettings.CastToJson();
                             File.WriteAllText(PrintSettingFilePath, json);
                         }
 
@@ -1970,7 +1969,7 @@ namespace Microsoft.Reporting.WinForms
                     {
                         try
                         {
-                            var customPrintDialog = File.ReadAllLines(PrintSettingFilePath).FL_CastToClass<CustomPrintDialog>();
+                            var customPrintDialog = File.ReadAllText(PrintSettingFilePath).CastToClass<CustomPrintDialog>();
 
                             CustomPrintDialog = customPrintDialog;
                         }
@@ -2041,7 +2040,7 @@ namespace Microsoft.Reporting.WinForms
                     {
 
                         var printSettingsTxt = File.ReadAllText(PrintSettingFilePath);
-                        ps = printSettingsTxt.FL_CastToClass<CustomPrintDialog>();
+                        ps = printSettingsTxt.CastToClass<CustomPrintDialog>();
                     }
 
                     if (ps == null || DefaultPrint)
@@ -2553,12 +2552,12 @@ namespace Microsoft.Reporting.WinForms
                         //check folder exists or not
                         if (!Directory.Exists(Path.GetDirectoryName(PrintSettingFilePath))) Directory.CreateDirectory(Path.GetDirectoryName(PrintSettingFilePath));
 
-                        File.WriteAllText(PrintSettingFilePath, new CustomPrintDialog(PrinterSettings, PageSettings).FL_CastToJson());
+                        File.WriteAllText(PrintSettingFilePath, new CustomPrintDialog(PrinterSettings, PageSettings).CastToJson());
                     }
                     if (!string.IsNullOrEmpty(File.ReadAllText(PrintSettingFilePath)))
                     {
 
-                        var ps = File.ReadAllText(PrintSettingFilePath).FL_CastToClass<CustomPrintDialog>();
+                        var ps = File.ReadAllText(PrintSettingFilePath).CastToClass<CustomPrintDialog>();
                         if (ps != null)
                         {
                             pageSetupDialog.PrinterSettings = ps.GetPrinterSettings(); //ps.GetPrinterSettings()

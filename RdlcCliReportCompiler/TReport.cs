@@ -18,7 +18,7 @@ namespace CliReportCompiler
 		{
 			var items = new[] { new ReportItem { Description = "Widget 6000", Price = 104.99m, Qty = 1 }, new ReportItem { Description = "Gizmo MAX", Price = 1.41m, Qty = 25 } };
 			//var jsonFile = File.ReadAllText(@"SaleBill_Thermal1.json");
-			//var dt = jsonFile.FL_CastToClass<List<RdlcData>>();
+			//var dt = jsonFile.CastToClass<List<RdlcData>>();
 			//dt.ForEach(x => report.DataSources.Add(new ReportDataSource(x.DataName, x.DataValue)));
 
 
@@ -47,7 +47,7 @@ namespace CliReportCompiler
             report.LoadReportDefinition(fs);
 
 
-            var dataTables = File.ReadAllText(Path.Combine(Environment.CurrentDirectory, "DemoDataset.xml")).FL_CastXmlToDataSet();
+            var dataTables = File.ReadAllText(Path.Combine(Environment.CurrentDirectory, "DemoDataset.xml")).CastXmlToDataSet();
 
 
 

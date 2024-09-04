@@ -133,7 +133,7 @@ namespace CliReportCompiler.ReportForm
             {
                 try
                 {
-                    var customPrintDialog = File.ReadAllLines(reportCompiler.ReportFile).FL_CastToClass<CustomPrintDialog>();
+                    var customPrintDialog = File.ReadAllLines(reportCompiler.ReportFile).CastToClass<CustomPrintDialog>();
 
                     reportViewer.CustomPrintDialog = customPrintDialog;
                 }
@@ -176,7 +176,7 @@ namespace CliReportCompiler.ReportForm
             {
                 try
                 {
-                    var customPrintDialog = File.ReadAllLines(reportCompiler.ReportFile).FL_CastToClass<CustomPrintDialog>();
+                    var customPrintDialog = File.ReadAllText(reportCompiler.ReportFile).CastToClass<CustomPrintDialog>();
 
                     reportViewer.CustomPrintDialog = customPrintDialog;
                 }

@@ -1,7 +1,5 @@
 ﻿using CliReportCompiler.ReportForm;
 using FrontLookCoreDbAccessLibrary.Desktop.Rdlc.FL_RDLC;
-using FrontLookCoreDbAccessLibrary.FL_RDLC;
-using FrontLookCoreLibraryAssembly.FL_General;
 using Microsoft.Reporting.WinForms;
 using Microsoft.ReportViewer.Common.FrontLookCode;
 using Microsoft.ReportViewer.WinForms.FrontLookCode;
@@ -45,7 +43,7 @@ Options:
   --ReportDataSource|-ds    Path to the data source file (should be in xml along with xml schema in single file).
   --ReportName|-rn          Name of the report.
   --Mode|-m                 Operation mode: Preview, Print, PrintSetup, or Export.
-  --ExportFormat|-ef        Export format: PDF, EXCEL, EXCELOPENXML, WORD, WORDOPENXML, IMAGE, HTML4_0, HTML5, MHTML
+  --ExportFormat|-ef        Export format: PDF, EXCEL, EXCELOPENXML, WORD, WORDOPENXML, IMAGE, HTML4_0, HTML5, MHTML, CSV, XML
   --ExportPath|-ep          Path where the exported file will be saved.
   --PrintSetupFile|-psf     Path to the print setup file(JsonFile).
   --Test|-t                 Test message (for debugging purposes).
@@ -56,7 +54,7 @@ Options:
 
 Example:
   CliReportCompiler.exe --reportPath ""C:\path\to\report.rdlc"" --reportDataSource ""C:\path\to\data.xml"" --PrintSetupFile ""C:\path\to\printsetup.json""  --Parameters ""json Parameters"" --ReportName ""ReportName"" --Mode ""Preview"" --ExportFormat ""PDF"" --ExportPath ""C:\path\to\exported\file"" --test ""Msg""
-  CliReportCompiler --help".FL_ConsoleWriteDebug();
+  CliReportCompiler --help".ConsoleWriteDebug();
         }
 
         /*--ReportPath "G:\Repos\frontlook-admin\AccLead\AccLead.Desktop\bin\Debug\net8.0-windows\ReportTemplates\Reports\RDLC\FinalAccount\TrialBalanceReport\TrialBalanceReport.rdlc" --ReportDataSource "C:\Users\deban\AppData\Local\Temp\tmp2t0lpk.tmp" --ReportName "TrialBalanceReport.rdlc" --PrintSetupFile "G:\Repos\frontlook-admin\AccLead\AccLead.Desktop\bin\Debug\net8.0-windows\CompanyReportSettings\1DCA0B1D-83F4AC6F-FC5A1698-C134895E-0C85BD79-B9E13A3D-4340A34D-B5B7EF0D\AccLead-2324\PrintSettings\TrialBalanceReport\TrialBalanceReport.txt" --Mode "Print"*/
@@ -69,7 +67,7 @@ Example:
 
             var report = new FL_IRdlcReport()
             {
-                DataTables = File.ReadAllText(Path.Combine(Environment.CurrentDirectory, "DemoDataset.xml")).FL_CastXmlToDataSet(),
+                DataTables = File.ReadAllText(Path.Combine(Environment.CurrentDirectory, "DemoDataset.xml")).CastXmlToDataSet(),
                 ReportFile = Path.Combine(Environment.CurrentDirectory, "DemoReport.rdlc"),
                 ReportName = "DemoReport.rdlc",
                 //PrintSettingFilePath = Path.Combine(Environment.CurrentDirectory, "DemoPrintSetup.json")
@@ -109,14 +107,14 @@ Example:
                 //it should be in the format --key|-key value
 #if DEBUG
 
-                var _key = args[i].TrimStart('-', '-').TrimStart('"').TrimEnd('"').FL_ConsoleWriteDebug();
+                var _key = args[i].TrimStart('-', '-').TrimStart('"').TrimEnd('"').ConsoleWriteDebug();
                 var key = ParameterNames.FirstOrDefault(x => x.Value.ToUpper() == _key.ToUpper() || x.Key.ToUpper() == _key.ToUpper()).Key;
 
-                var value = args[i + 1].TrimStart('"').TrimEnd('"').FL_ConsoleWriteDebug();
+                var value = args[i + 1].TrimStart('"').TrimEnd('"').ConsoleWriteDebug();
 
 #else
 
-                var _key = args[i].TrimStart('-', '-').FL_ConsoleWriteDebug();
+                var _key = args[i].TrimStart('-', '-').ConsoleWriteDebug();
                 var key = ParameterNames.FirstOrDefault(x => x.Value.ToUpper() == _key.ToUpper() || x.Key.ToUpper() == _key.ToUpper()).Key;
 
                 var value = args[i + 1];
@@ -245,7 +243,7 @@ Example:
         {
             var reportPath = GetParameters["ReportPath"];
             var dsFile = GetParameters["ReportDataSource"];
-            var ds = File.ReadAllText(dsFile).FL_CastXmlToDataSet();
+            var ds = File.ReadAllText(dsFile).CastXmlToDataSet();
 
             var reportName = GetParameters["ReportName"];
             var mode = GetParameters["Mode"];
@@ -268,7 +266,7 @@ Example:
 
             var rldcReportCompiler = new FL_IRdlcReport()
             {
-                DataTables = File.ReadAllText(dsFile).FL_CastXmlToDataSet(),
+                DataTables = File.ReadAllText(dsFile).CastXmlToDataSet(),
                 ReportFile = reportPath,
                 ReportName = reportName,
                 PrintSettingFilePath = printSetupFile
@@ -314,7 +312,7 @@ Example:
             {
                 if (!string.IsNullOrEmpty(File.ReadAllText(printSetupFile)))
                 {
-                    var PageSettings = File.ReadAllText(printSetupFile).FL_CastToClass<CustomPrintDialog>();
+                    var PageSettings = File.ReadAllText(printSetupFile).CastToClass<CustomPrintDialog>();
                     if (PageSettings != null && PageSettings.CPageSettings != null)
                     {
                         rldcReportCompiler.PrintSettings = PageSettings;
