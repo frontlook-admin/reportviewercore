@@ -1970,7 +1970,7 @@ namespace Microsoft.Reporting.WinForms
                     {
                         try
                         {
-                            var customPrintDialog = File.ReadAllLines(PrintSettingFilePath).FL_CastToClass<CustomPrintDialog>();
+                            var customPrintDialog = File.ReadAllText(PrintSettingFilePath).FL_CastToClass<CustomPrintDialog>();
 
                             CustomPrintDialog = customPrintDialog;
                         }
