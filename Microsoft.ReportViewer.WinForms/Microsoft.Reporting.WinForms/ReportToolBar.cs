@@ -595,6 +595,16 @@ namespace Microsoft.Reporting.WinForms
             }
         }
 
+        public void OnPrinterPageSettingsClick()
+        {
+            if (this.Print != null)
+            {
+                toolStrip1.Capture = false;
+
+                this.PrinterPageSettings(this, EventArgs.Empty);
+            }
+        }
+
         private void OnPrinterPageSettings_Click(object sender, EventArgs e)
         {
             if (this.Print != null)

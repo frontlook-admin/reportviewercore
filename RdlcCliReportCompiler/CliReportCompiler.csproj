@@ -1,62 +1,73 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-	  <TargetFrameworks>net8.0-Windows</TargetFrameworks>
-	  <FrontLook>8.24.*</FrontLook>
-  </PropertyGroup>
-
-  <ItemGroup>
-    <None Remove="Report.rdlc" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="Report.rdlc">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\FrontLookCore\FrontLookCoreDbAccessLibrary\FrontLookCoreDbAccessLibrary.Desktop\FrontLookCoreDbAccessLibrary.Desktop.csproj" />
-    <ProjectReference Include="..\Microsoft.ReportViewer.WinForms\Microsoft.ReportViewer.WinForms.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Update="AccLead.xsd">
-      <Generator>MSDataSetGenerator</Generator>
-      <LastGenOutput>AccLead.Designer.cs</LastGenOutput>
-    </None>
-    <None Update="DemoDataset.xml">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="DemoPrintSetup.json">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="DemoReport.rdlc">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="TrialBalanceReport.rdlc">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
-
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFrameworks>net8.0-Windows</TargetFrameworks>
+		<FrontLook>8.24.*</FrontLook>
+	</PropertyGroup>
 
 	<ItemGroup>
+		<Content Remove="G:\NugetPackages\frontlookcorelibraryassembly\8.24.902.14\contentFiles\any\net8.0\FL_HelperFiles\Database\Json\CountriesStatesCities.json" />
+		<Content Remove="G:\NugetPackages\frontlookcorelibraryassembly\8.24.902.14\contentFiles\any\net8.0\FL_HelperFiles\Database\Json\PinCodeMaster.json" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Remove="Report.rdlc" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Content Include="Report.rdlc">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Microsoft.ReportViewer.WinForms\Microsoft.ReportViewer.WinForms.csproj" />
+	</ItemGroup>
+
+
+	<ItemGroup Condition="'$(Configuration)'=='Debug'">
 		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreLibraryAssembly\FrontLookCoreLibraryAssembly.csproj" />
+		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreDbAccessLibrary\FrontLookCoreDbAccessLibrary.Desktop.Rdlc\FrontLookCoreDbAccessLibrary.Desktop.Rdlc.csproj" />
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(Configuration)'!='Debug'">
+		<PackageReference Include="FrontLookCoreLibraryAssembly" Version="$(FrontLook)" />
+		<PackageReference Include="FrontLookCoreDbAccessLibrary.Desktop.Rdlc" Version="$(FrontLook)" />
 	</ItemGroup>
 
 
 	<ItemGroup>
-	  <Compile Update="AccLead.Designer.cs">
-	    <DesignTime>True</DesignTime>
-	    <AutoGen>True</AutoGen>
-	    <DependentUpon>AccLead.xsd</DependentUpon>
-	  </Compile>
-	  <Compile Update="ReportForm\FL_RdlcReportViewerForm.cs">
-	    <SubType>Form</SubType>
-	  </Compile>
+		<None Update="AccLead.xsd">
+			<Generator>MSDataSetGenerator</Generator>
+			<LastGenOutput>AccLead.Designer.cs</LastGenOutput>
+		</None>
+		<None Update="DemoDataset.xml">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="DemoPrintSetup.json">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="DemoReport.rdlc">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Update="TrialBalanceReport.rdlc">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
 	</ItemGroup>
-<!--
+
+
+	<ItemGroup>
+		<Compile Update="AccLead.Designer.cs">
+			<DesignTime>True</DesignTime>
+			<AutoGen>True</AutoGen>
+			<DependentUpon>AccLead.xsd</DependentUpon>
+		</Compile>
+		<Compile Update="ReportForm\FL_RdlcReportViewerForm.cs">
+			<SubType>Form</SubType>
+		</Compile>
+	</ItemGroup>
+	<!--
 	<ItemGroup Condition="'$(Configuration)'!='Debug'">
 
 		<PackageReference Include="FrontLookCoreLibraryAssembly" Version="$(FrontLook)" />
@@ -70,5 +81,5 @@
 		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreLibraryAssembly\FrontLookCoreLibraryAssembly.csproj" />
 	</ItemGroup>
 	-->
-	
+
 </Project>

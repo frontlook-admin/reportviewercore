@@ -387,7 +387,7 @@ namespace Microsoft.Reporting
 						onDemandProcessingResult = CreateSnapshotAndRender(reportProcessing, renderingExtension, pc, rc, subreportHandler, m_executionSession.ExecutionInfo.ReportParameters, m_executionSession.Credentials);
 					}
 				}
-				catch
+				catch(Exception ex)
 				{
 					m_executionSession.Snapshot = null;
 					throw;

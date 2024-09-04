@@ -1,6 +1,6 @@
 ﻿
 
-using FrontLookCoreDbAccessLibrary.Desktop.FL_RDLC;
+using FrontLookCoreDbAccessLibrary.Desktop.Rdlc.FL_RDLC;
 using FrontLookCoreLibraryAssembly.FL_General;
 using Microsoft.Reporting.WinForms;
 using System;

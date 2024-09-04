@@ -8,6 +8,7 @@ using FrontLookCoreLibraryAssembly.FL_General;
 using System.Windows.Forms;
 using System.IO;
 using Microsoft.Reporting.WinForms;
+using System.Text.Json.Serialization;
 
 namespace Microsoft.ReportViewer.WinForms.FrontLookCode
 {
@@ -36,12 +37,19 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
 
         public bool Color { get; set; }
         public bool Landscape { get; set; }
+        //public bool? MetricEnabled { get; set; }
         public PaperSize PaperSize { get; set; }
         //private static double MarginConversion = 0.394;
         private static double MarginConversion = (1/2.54);
         public Margins Margins { get; set; }
+
+        //[JsonIgnore]
+        //public Margins ReportMargins => GetSetupMargin();
         public PaperSource PaperSource { get; set; }
         public PrinterResolution PrinterResolution { get; set; }
+
+        //[JsonIgnore]
+        //public PageSettings ReportPageSettings => GetSetupPageSettings();
 
         public PageSettings GetPageSettings()
         {
@@ -57,30 +65,55 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
             };
 
         }
+
+        public Margins GetSetupMargin()
+        {
+            try
+            {
+                var m = new Margins();
+                var Top = ((double)Margins.Top) / MarginConversion;
+                var Bottom = ((double)Margins.Bottom) / MarginConversion;
+                var Left = ((double)Margins.Left) / MarginConversion;
+                var Right = ((double)Margins.Right) / MarginConversion;
+
+                m.Top = (int)Top;
+                m.Bottom = (int)Bottom;
+                m.Left = (int)Left;
+                m.Right = (int)Right;
+
+                return m;
+            }
+            catch { 
+                return Margins; 
+            }
+        }
+
         public PageSettings GetSetupPageSettings()
         {
-            var m = new Margins();
-            var Top = ((double)Margins.Top)/MarginConversion;
-            var Bottom = ((double)Margins.Bottom) / MarginConversion;
-            var Left = ((double)Margins.Left) / MarginConversion;
-            var Right = ((double)Margins.Right) / MarginConversion;
-
-            m.Top = (int)Top;
-            m.Bottom = (int)Bottom;
-            m.Left = (int)Left;
-            m.Right = (int)Right;
-
-
-
-            return new PageSettings()
+            try
             {
-                Color = Color,
-                Landscape = Landscape,
-                PaperSize = PaperSize,
-                Margins = m,
-                PaperSource = PaperSource,
-                PrinterResolution = PrinterResolution
-            };
+                return new PageSettings()
+                {
+                    Color = Color,
+                    Landscape = Landscape,
+                    PaperSize = PaperSize,
+                    Margins = GetSetupMargin(),
+                    PaperSource = PaperSource,
+                    PrinterResolution = PrinterResolution
+                };
+            }
+            catch
+            {
+                return new PageSettings()
+                {
+                    Color = Color,
+                    Landscape = Landscape,
+                    PaperSize = PaperSize,
+                    Margins = Margins,
+                    PaperSource = PaperSource,
+                    PrinterResolution = PrinterResolution
+                };
+            }
 
         }
     }

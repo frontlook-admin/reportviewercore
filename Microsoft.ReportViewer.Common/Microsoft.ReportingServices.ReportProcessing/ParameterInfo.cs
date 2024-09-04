@@ -954,7 +954,7 @@ namespace Microsoft.ReportingServices.ReportProcessing
 				string text = val as string;
 				if (text == null)
 				{
-					xml.WriteString(FL_CastToString(val, CultureInfo.InvariantCulture));
+					xml.WriteString(CastToString(val, CultureInfo.InvariantCulture));
 				}
 				else
 				{
@@ -1023,7 +1023,7 @@ namespace Microsoft.ReportingServices.ReportProcessing
 			return parameterInfo;
 		}
 
-		public static string FL_CastToString(object val, DataType type, CultureInfo language)
+		public static string CastToString(object val, DataType type, CultureInfo language)
 		{
 			if (!ParameterBase.Cast(val, type, out object _, DataType.String, language))
 			{
@@ -1032,9 +1032,9 @@ namespace Microsoft.ReportingServices.ReportProcessing
 			return CastValueToLabelString(val, language);
 		}
 
-		public string FL_CastToString(object val, CultureInfo language)
+		public string CastToString(object val, CultureInfo language)
 		{
-			return FL_CastToString(val, base.DataType, language);
+			return CastToString(val, base.DataType, language);
 		}
 
 		internal static string CastValueToLabelString(object val, CultureInfo language)

@@ -1,6 +1,5 @@
 ﻿
 using FrontLookCoreDbAccessLibrary.Desktop.FL_RDLC;
-using FrontLookCoreDbAccessLibrary.FL_FastReport;
 using Microsoft.Reporting.WinForms;
 using NPOI.OpenXmlFormats.Vml;
 using System;

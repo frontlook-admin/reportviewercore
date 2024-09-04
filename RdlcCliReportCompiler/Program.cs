@@ -1,13 +1,11 @@
-﻿
-using CliReportCompiler.ReportForm;
-using FastReport.Data;
-
-using FrontLookCoreDbAccessLibrary.Desktop.FL_RDLC;
+﻿using CliReportCompiler.ReportForm;
+using FrontLookCoreDbAccessLibrary.Desktop.Rdlc.FL_RDLC;
+using FrontLookCoreDbAccessLibrary.FL_RDLC;
 using FrontLookCoreLibraryAssembly.FL_General;
 using Microsoft.Reporting.WinForms;
 using Microsoft.ReportViewer.Common.FrontLookCode;
 using Microsoft.ReportViewer.WinForms.FrontLookCode;
-using Namotion.Reflection;
+using Org.BouncyCastle.Utilities.IO;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -15,8 +13,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Windows.Forms;
-using static System.Windows.Forms.Design.AxImporter;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement.StartPanel;
+using FL_RdlcReportViewerForm = CliReportCompiler.ReportForm.FL_RdlcReportViewerForm;
 
 namespace CliReportCompiler
 {
@@ -25,14 +22,9 @@ namespace CliReportCompiler
 	CliReportCompiler.exe --reportPath|-rp "C:\path\to\report.rdlc" --reportDataSource|-ds "C:\path\to\data.xml" --Parameters|-p "json Parameters" --ReportName|-rn "ReportName" --Mode|-m "Preview|Print|Export" --ExportFormat|-ef "PDF|Excel|Word|Image" --ExportPath|-ep "C:\path\to\exported\file" --test|-t "Msg"
 	*/
 
-
-
-
-
-    class Program
+    internal class Program
     {
-
-        static Dictionary<string, string> ParameterNames = new()
+        private static Dictionary<string, string> ParameterNames = new()
         {
             { "ReportPath", "rp" },
             { "ReportDataSource", "ds" },
@@ -45,8 +37,7 @@ namespace CliReportCompiler
             { "Test", "t" }
         };
 
-
-        static void ShowUsage()
+        private static void ShowUsage()
         {
             @"Usage: CliReportCompiler.exe options
 Options:
@@ -61,21 +52,19 @@ Options:
   --Demo|-d                 Run a demo of the ReportViewer.
   --Help|-h                 Display this help message.
 
-
     Parameters              Pass the parameters in the data source file with table name RldcParameters.
 
 Example:
   CliReportCompiler.exe --reportPath ""C:\path\to\report.rdlc"" --reportDataSource ""C:\path\to\data.xml"" --PrintSetupFile ""C:\path\to\printsetup.json""  --Parameters ""json Parameters"" --ReportName ""ReportName"" --Mode ""Preview"" --ExportFormat ""PDF"" --ExportPath ""C:\path\to\exported\file"" --test ""Msg""
   CliReportCompiler --help".FL_ConsoleWriteDebug();
         }
+
         /*--ReportPath "G:\Repos\frontlook-admin\AccLead\AccLead.Desktop\bin\Debug\net8.0-windows\ReportTemplates\Reports\RDLC\FinalAccount\TrialBalanceReport\TrialBalanceReport.rdlc" --ReportDataSource "C:\Users\deban\AppData\Local\Temp\tmp2t0lpk.tmp" --ReportName "TrialBalanceReport.rdlc" --PrintSetupFile "G:\Repos\frontlook-admin\AccLead\AccLead.Desktop\bin\Debug\net8.0-windows\CompanyReportSettings\1DCA0B1D-83F4AC6F-FC5A1698-C134895E-0C85BD79-B9E13A3D-4340A34D-B5B7EF0D\AccLead-2324\PrintSettings\TrialBalanceReport\TrialBalanceReport.txt" --Mode "Print"*/
 
-
-
-        static void RunDemo()
+        private static void RunDemo()
         {
-            // Here, you would create and show your form with the ReportViewer control.
-            // This is a placeholder for the actual demo implementation.
+            // Here, you would create and show your form with the ReportViewer control. This is a
+            // placeholder for the actual demo implementation.
             Console.WriteLine("Running demo...");
 
             var report = new FL_IRdlcReport()
@@ -86,16 +75,14 @@ Example:
                 //PrintSettingFilePath = Path.Combine(Environment.CurrentDirectory, "DemoPrintSetup.json")
             };
 
-
-
             using var form = new ReportViewerForm(report); // Ensure you have a form named ReportViewerForm with a ReportViewer control.
             form.ShowDialog();
         }
 
-        static Dictionary<string, string> GetParameters = new();
-        static void ParseArguments(string[] args)
-        {
+        private static Dictionary<string, string> GetParameters = new();
 
+        private static void ParseArguments(string[] args)
+        {
             if (Array.Exists(args, arg => arg.ToUpper() == "--HELP" || arg.ToUpper() == "-H"))
             {
                 ShowUsage();
@@ -142,7 +129,6 @@ Example:
         //Console read line and parse the arguments
         private static void ParseArguments()
         {
-
             ShowUsage();
             //open console and wait for input
             Console.WriteLine("Type 'exit' and press enter to close the console.");
@@ -156,7 +142,6 @@ Example:
 
             try
             {
-
                 if (Array.Exists(args, arg => arg.ToUpper() == "--HELP" || arg.ToUpper() == "-H"))
                 {
                     ShowUsage();
@@ -184,7 +169,7 @@ Example:
         //PageSettings
 
         [STAThread]
-        static void Main(string[] args)
+        private static void Main(string[] args)
         {
             if (args.Length == 0)
             {
@@ -212,13 +197,12 @@ Example:
                 {
                     Console.WriteLine(ex.Message);
                 }
-
             }
         }
 
-        static void Execute()
+        private static void Execute()
         {
-            if(GetParameters.ContainsKey("Test"))
+            if (GetParameters.ContainsKey("Test"))
             {
                 MessageBox.Show(GetParameters["Test"]);
             }
@@ -257,11 +241,8 @@ Example:
             }
         }
 
-        static void ProcessReport()
+        private static void ProcessReport()
         {
-            
-
-
             var reportPath = GetParameters["ReportPath"];
             var dsFile = GetParameters["ReportDataSource"];
             var ds = File.ReadAllText(dsFile).FL_CastXmlToDataSet();
@@ -269,7 +250,6 @@ Example:
             var reportName = GetParameters["ReportName"];
             var mode = GetParameters["Mode"];
             var printSetupFile = GetParameters["PrintSetupFile"];
-
 
             if (ds.Tables.Count == 0)
             {
@@ -285,8 +265,6 @@ Example:
             {
                 throw new Exception("Report file not found");
             }
-
-            
 
             var rldcReportCompiler = new FL_IRdlcReport()
             {
@@ -326,7 +304,6 @@ Example:
                 }
             }
 
-            
             //check file exists
             if (!Directory.Exists(Path.GetDirectoryName(printSetupFile)))
             {
@@ -344,12 +321,14 @@ Example:
                     }
                     else
                     {
-                        throw new Exception("Invalid PrintSetupFile");
+                        //check if Mode is not PrintSetup or Preview
+                        if (mode != "PrintSetup" && mode != "Preview")
+                        {
+                            throw new Exception("Invalid PrintSetupFile");
+                        }
                     }
                 }
             }
-            
-
 
             if (mode == "Preview" || mode == "PrintSetup")
             {
@@ -361,7 +340,7 @@ Example:
             else if (mode == "Print")
             {
                 //rldcReportCompiler.PrintToPrinter();
-                PrintReport(rldcReportCompiler);
+                PrintReport1(rldcReportCompiler);
             }
             else if (mode == "Export")
             {
@@ -373,14 +352,17 @@ Example:
             }
         }
 
-        static void PreviewReport(FL_IRdlcReport report)
+        private static void PreviewReport(FL_IRdlcReport report)
         {
-
             using var form = new FL_RdlcReportViewerForm(report); // Ensure you have a form named ReportViewerForm with a ReportViewer control.
             form.ShowDialog();
+
+            //dispose the form
+            form.Dispose();
+            report.Dispose();
         }
 
-        static ExportFormat GetExportFormat()
+        private static ExportFormat GetExportFormat()
         {
             var getExportFormat = GetParameters["ExportFormat"];
             if (string.IsNullOrEmpty(getExportFormat))
@@ -403,7 +385,7 @@ Example:
             };
         }
 
-        static void ExportReport(FL_IRdlcReport report)
+        private static void ExportReport(FL_IRdlcReport report)
         {
             var getExportFormat = GetParameters["ExportFormat"];
             if (string.IsNullOrEmpty(getExportFormat))
@@ -411,26 +393,48 @@ Example:
                 throw new Exception("ExportFormat is missing.");
             }
 
-            ExportFormat exportFormat = ExportFormat.PDF;
+            //ExportFormat exportFormat = GetExportFormat();
 
-            using var LocalReport = report.GetLoadedReport();
-            lock (LocalReport)
-            {
-                report.ExportFileName = GetParameters["ExportPath"];
-                report.ExportFormat = GetExportFormat();
-            }
+            //using var LocalReport = report.GetLoadedReport();
+
+            //report.ExportFileName = GetParameters["ExportPath"];
+
+            report.Export();
+
+            //LocalReport?.Dispose();
+            report?.Dispose();
         }
 
-        static void PrintReport(FL_IRdlcReport report)
+        private static void PrintReport(FL_IRdlcReport report)
         {
-            using var LocalReport = report.GetLoadedReport();
-            lock (LocalReport)
+            /*
+            var LocalReportStream = report.GetPrintStreams();
+
+            var pageSettings = report.PrintSettings.GetPageSettings();
+            var pageSettingsAlt = report.PrintSettings.GetSetupPageSettings();
+            LocalReportStream.Print(pageSettings, pageSettingsAlt);
+
+            */
+
+            using (var LocalReport = report.GetLoadedReport())
             {
                 LocalReport.PrintToPrinter(report.PrintSettings);
-            }
 
+                LocalReport?.Dispose();
+                report?.Dispose();
+            };
         }
 
-    }
+        private static void PrintReport1(FL_IRdlcReport report)
+        {
+            report.TriggerPrint = true;
 
+            using var form = new FL_RdlcReportViewerForm(report); // Ensure you have a form named ReportViewerForm with a ReportViewer control.
+            form.Print();
+
+            //dispose the form
+            form.Dispose();
+            report.Dispose();
+        }
+    }
 }
