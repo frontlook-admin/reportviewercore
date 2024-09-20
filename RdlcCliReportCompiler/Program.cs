@@ -1,6 +1,5 @@
 ﻿using CliReportCompiler.ReportForm;
 using FrontLookCoreDbAccessLibrary.Desktop.Rdlc.FL_RDLC;
-using FrontLookCoreDbAccessLibrary.FL_RDLC;
 using FrontLookCoreLibraryAssembly.FL_General;
 using Microsoft.Reporting.WinForms;
 using Microsoft.ReportViewer.Common.FrontLookCode;
