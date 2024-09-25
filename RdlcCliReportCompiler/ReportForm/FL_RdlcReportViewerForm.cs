@@ -153,7 +153,10 @@ namespace CliReportCompiler.ReportForm
         }
 
 
-
+        /// <summary>
+        /// Load the report
+        /// </summary>
+        /// <exception cref="Exception"></exception>
         private void Load()
         {
             if (reportCompiler.DataTables == null || reportCompiler.DataTables.Tables.Count == 0)
