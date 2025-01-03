@@ -2078,6 +2078,10 @@ namespace Microsoft.Reporting.WinForms
                         reportPrintDocument.DocumentName = displayNameForUse;
                         reportPrintDocument.PrinterSettings = printerSettings;
                         reportPrintDocument.Print();
+
+                        //clear winRSviewer 
+                        winRSviewer.SetNewPage(null);
+
                     }
                 }
                 else
