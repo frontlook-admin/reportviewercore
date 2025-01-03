@@ -1,5 +1,5 @@
 ﻿
-using FrontLookCoreDbAccessLibrary.Desktop.FL_RDLC;
+using FrontLookCoreDbAccessLibrary.Desktop.Rdlc.FL_RDLC;
 using Microsoft.Reporting.WinForms;
 using NPOI.OpenXmlFormats.Vml;
 using System;
