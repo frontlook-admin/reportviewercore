@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
 		<TargetFrameworks>net8.0-Windows</TargetFrameworks>
-		<FrontLook>8.24.*</FrontLook>
+		<FrontLook>8.25.*</FrontLook>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -17,9 +17,15 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<!--<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreDbAccessLibrary\FrontLookCoreDbAccessLibrary.Desktop.Rdlc\FrontLookCoreDbAccessLibrary.Desktop.Rdlc.csproj" />-->
 		<ProjectReference Include="..\Microsoft.ReportViewer.WinForms\Microsoft.ReportViewer.WinForms.csproj" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<PackageReference Include="FrontLookCoreDbAccessLibrary.Desktop.Rdlc" Version="$(FrontLook)">
+			<ExcludeAssets>contentFiles</ExcludeAssets>
+		</PackageReference>
+	</ItemGroup>
 	<ItemGroup>
 		<Compile Update="FL_RldcReportViewerForm.cs">
 			<SubType>Form</SubType>
@@ -45,6 +51,7 @@
 	</ItemGroup>
 
 
+	<!--
 
 	<ItemGroup Condition="'$(Configuration)'!='Debug'">
 
@@ -56,6 +63,10 @@
 		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreDbAccessLibrary\FrontLookCoreDbAccessLibrary\FrontLookCoreDbAccessLibrary.csproj" />
 		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreLibraryAssembly\FrontLookCoreLibraryAssembly.csproj" />
 	</ItemGroup>
+-->
 
+	<ItemGroup>
+		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreLibraryAssembly\FrontLookCoreLibraryAssembly.csproj" />
+	</ItemGroup>
 
 </Project>

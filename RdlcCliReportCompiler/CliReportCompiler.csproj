@@ -3,12 +3,38 @@
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
 		<TargetFrameworks>net8.0-Windows</TargetFrameworks>
-		<FrontLook>8.24.*</FrontLook>
+		<FrontLook>8.25.*</FrontLook>
+	</PropertyGroup>
+
+	<PropertyGroup Label="Version" Condition="'$(DesignTimeBuild)' != 'true' OR '$(BuildingProject)' == 'true'">
+		<BuildId>$([System.DateTime]::Now.ToString(yy.MMdd.HHmm))</BuildId>
+		<BuildId Condition="'$(Configuration)'=='Release'">$([System.DateTime]::Now.ToString(yy.MMdd.HH))</BuildId>
+		<BuildId Condition="'$(Configuration)'=='Debug'">$([System.DateTime]::Now.ToString(yy.MMdd))</BuildId>
+
+		<BuildId Condition="'$(Configuration)'=='DevOps'">$([System.DateTime]::Now.ToString(yy.MMdd))</BuildId>
+		<BuildCode Condition="'$(Configuration)'=='Release'">$([System.DateTime]::Now.ToString(.hhmmss))</BuildCode>
+		<BuildCode Condition="'$(Configuration)'=='Debug'"></BuildCode>
+
+		<BuildCode Condition="'$(Configuration)'=='DevOps'" />
+		<VersionPrefix>8.$(BuildId)</VersionPrefix>
+		<BuildVersion>$(BuildId)$(BuildCode)</BuildVersion>
+		<AssemblyVersion>$(Version)</AssemblyVersion>
+		<FileVersion>$(Version)</FileVersion>
+		<PackageId>$(AssemblyName)</PackageId>
+		<Product>$(AssemblyName)</Product>
+		<Version>$(VersionPrefix)</Version>
+	</PropertyGroup>
+
+	<PropertyGroup Label="Signer" Condition="'$(Configuration)'=='Release' AND ('$(DesignTimeBuild)' != 'true' OR '$(BuildingProject)' == 'true')">
+		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<SignAssembly>true</SignAssembly>
+		<AssemblyOriginatorKeyFile>G:\ProjectSigner\frontlook_signature_rider.snk</AssemblyOriginatorKeyFile>
+		<PackageOutputPath>G:\ProjectSigner\NugetPush\</PackageOutputPath>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<Content Remove="G:\NugetPackages\frontlookcorelibraryassembly\8.24.902.14\contentFiles\any\net8.0\FL_HelperFiles\Database\Json\CountriesStatesCities.json" />
-		<Content Remove="G:\NugetPackages\frontlookcorelibraryassembly\8.24.902.14\contentFiles\any\net8.0\FL_HelperFiles\Database\Json\PinCodeMaster.json" />
+		<Content Remove="G:\NugetPackages\.cache\frontlookcorelibraryassembly\8.25.109.13\contentFiles\any\net8.0\FL_HelperFiles\Database\Json\CountriesStatesCities.json" />
+		<Content Remove="G:\NugetPackages\.cache\frontlookcorelibraryassembly\8.25.109.13\contentFiles\any\net8.0\FL_HelperFiles\Database\Json\PinCodeMaster.json" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -25,6 +51,7 @@
 		<ProjectReference Include="..\Microsoft.ReportViewer.WinForms\Microsoft.ReportViewer.WinForms.csproj" />
 	</ItemGroup>
 
+	<!--
 	<ItemGroup Condition="'$(Configuration)'=='Debug'">
 		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreLibraryAssembly\FrontLookCoreLibraryAssembly.csproj" />
 		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreDbAccessLibrary\FrontLookCoreDbAccessLibrary.Desktop.Rdlc\FrontLookCoreDbAccessLibrary.Desktop.Rdlc.csproj" />
@@ -32,6 +59,14 @@
 
 	<ItemGroup Condition="'$(Configuration)'!='Debug'">
 		<PackageReference Include="FrontLookCoreLibraryAssembly" Version="$(FrontLook)" />
+		<PackageReference Include="FrontLookCoreDbAccessLibrary.Desktop.Rdlc" Version="$(FrontLook)" />
+	</ItemGroup>
+	-->
+
+	<ItemGroup>
+		<PackageReference Include="FrontLookCoreLibraryAssembly" Version="$(FrontLook)">
+			<ExcludeAssets>contentFiles</ExcludeAssets>
+		</PackageReference>
 		<PackageReference Include="FrontLookCoreDbAccessLibrary.Desktop.Rdlc" Version="$(FrontLook)" />
 	</ItemGroup>
 	<!--

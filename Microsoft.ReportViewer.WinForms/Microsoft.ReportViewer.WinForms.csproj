@@ -3,7 +3,7 @@
 		<AssemblyName>Microsoft.ReportViewer.WinForms</AssemblyName>
 		<UseWindowsForms>True</UseWindowsForms>
 		<TargetFrameworks>net8.0-Windows</TargetFrameworks>
-		<FrontLook>8.24.*</FrontLook>
+		<FrontLook>8.25.*</FrontLook>
 	</PropertyGroup>
 	<PropertyGroup>
 		<LangVersion>8.0</LangVersion>
@@ -69,13 +69,19 @@
 	<ItemGroup>
 		<ProjectReference Include="..\Microsoft.ReportViewer.Common\Microsoft.ReportViewer.Common.csproj" />
 	</ItemGroup>
-
+	<!--
 	<ItemGroup Condition="'$(Configuration)'=='Debug'">
 		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreLibraryAssembly\FrontLookCoreLibraryAssembly.csproj" />
 	</ItemGroup>
 
 	<ItemGroup Condition="'$(Configuration)'!='Debug'">
 		<PackageReference Include="FrontLookCoreLibraryAssembly" Version="$(FrontLook)" />
+	</ItemGroup>
+	-->
+	<ItemGroup>
+		<PackageReference Include="FrontLookCoreLibraryAssembly" Version="$(FrontLook)">
+			<ExcludeAssets>contentFiles</ExcludeAssets>
+		</PackageReference>
 	</ItemGroup>
 
 </Project>
