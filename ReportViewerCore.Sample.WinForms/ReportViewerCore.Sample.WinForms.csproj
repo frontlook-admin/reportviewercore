@@ -55,7 +55,7 @@
 
 	<ItemGroup Condition="'$(Configuration)'!='Debug'">
 
-		<PackageReference Include="FrontLookCoreLibraryAssembly" Version="$(FrontLook)" />
+		<PackageReference Include="FrontLookCoreLibraryAssembly" Version="$(FrontLook)"><ExcludeAssets>contentFiles</ExcludeAssets></PackageReference>
 		<PackageReference Include="FrontLookCoreDbAccessLibrary" Version="$(FrontLook)" />
 		<PackageReference Include="FrontLookCoreDbAccessLibrary.Desktop" Version="$(FrontLook)" />
 	</ItemGroup>
