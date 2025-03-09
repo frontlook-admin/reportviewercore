@@ -1,6 +1,7 @@
 ﻿using CliReportCompiler.ReportForm;
 using FrontLookCoreDbAccessLibrary.Desktop.Rdlc.FL_RDLC;
 using FrontLookCoreLibraryAssembly.FL_General;
+using FrontLookCoreLibraryAssembly.FL_GlobalClasses;
 using Microsoft.Reporting.WinForms;
 using Microsoft.ReportViewer.Common.FrontLookCode;
 using Microsoft.ReportViewer.WinForms.FrontLookCode;
@@ -421,7 +422,8 @@ Example:
 
                 LocalReport?.Dispose();
                 report?.Dispose();
-            };
+            }
+            ;
         }
 
         private static void PrintReport1(FL_IRdlcReport report)
