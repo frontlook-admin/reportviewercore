@@ -67,6 +67,7 @@
 		<PackageReference Include="System.ServiceModel.Http" Version="4.8.1" />
 	</ItemGroup>
 	<ItemGroup>
+		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreLibraryAssembly\FrontLookCoreLibraryAssembly.csproj" />
 		<ProjectReference Include="..\Microsoft.ReportViewer.Common\Microsoft.ReportViewer.Common.csproj" />
 	</ItemGroup>
 	<!--
@@ -78,10 +79,5 @@
 		<PackageReference Include="FrontLookCoreLibraryAssembly" Version="$(FrontLook)"><ExcludeAssets>contentFiles</ExcludeAssets></PackageReference>
 	</ItemGroup>
 	-->
-	<ItemGroup>
-		<PackageReference Include="FrontLookCoreLibraryAssembly" Version="$(FrontLook)">
-			<ExcludeAssets>contentFiles</ExcludeAssets>
-		</PackageReference>
-	</ItemGroup>
 
 </Project>
