@@ -63,13 +63,16 @@
 	</ItemGroup>
 	-->
 	<!--
-	<ItemGroup>
-		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreLibraryAssembly\FrontLookCoreLibraryAssembly.csproj" />
+	-->
+	<ItemGroup Condition="'$(Configuration)'=='Debug'">
+		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreLibraryAssembly\FrontLookCoreLibraryAssembly.csproj">
+
+			<ExcludeAssets>contentFiles</ExcludeAssets>
+		</ProjectReference>
 		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreDbAccessLibrary\FrontLookCoreDbAccessLibrary.Desktop.Rdlc\FrontLookCoreDbAccessLibrary.Desktop.Rdlc.csproj" />
 	</ItemGroup>
 
-	-->
-	<ItemGroup>
+	<ItemGroup Condition="'$(Configuration)'!='Debug'">
 		<PackageReference Include="FrontLookCoreLibraryAssembly" Version="$(FrontLook)">
 			<ExcludeAssets>contentFiles</ExcludeAssets>
 		</PackageReference>
