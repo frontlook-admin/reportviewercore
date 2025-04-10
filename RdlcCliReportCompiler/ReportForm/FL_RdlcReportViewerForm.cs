@@ -175,6 +175,34 @@ namespace CliReportCompiler.ReportForm
             using var fs = new FileStream(reportCompiler.ReportFile, FileMode.Open);
             reportViewer.LocalReport.LoadReportDefinition(fs);
 
+            if (reportCompiler.SubReports.Count > 0)
+            {
+                reportViewer.LocalReport.ShowDetailedSubreportMessages = true;
+
+                foreach (var subReport in reportCompiler.SubReports)
+                {
+                    var subReportName = subReport.Key;
+                    var subReportPath = subReport.Value;
+                    if (string.IsNullOrEmpty(subReportPath))
+                    {
+                        continue;
+                    }
+                    if (File.Exists(subReportPath))
+                    {
+                        var subReportBytes = File.ReadAllBytes(subReportPath);
+                        using var subFs = new MemoryStream(subReportBytes);
+                        reportViewer.LocalReport.LoadSubreportDefinition(subReportName, subFs);
+                    }
+                    else
+                    {
+                        //throw new Exception($"Sub report file not found: {subReportPath}");
+                        continue;
+                    }
+                }
+            }
+            reportViewer.LocalReport.EnableExternalImages = true;
+            reportViewer.LocalReport.EnableHyperlinks = true;
+
             reportViewer.PrintSettingFilePath = reportCompiler.PrintSettingFilePath;
             if (File.Exists(reportCompiler.ReportFile))
             {

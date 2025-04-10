@@ -15,18 +15,18 @@ using System.Windows.Forms;
 namespace CliReportCompiler
 {
     public class ReportViewerForm : Form
-	{
-		private readonly ReportViewer reportViewer;
+    {
+        private readonly ReportViewer reportViewer;
         public static FL_IRdlcReport reportCompiler { get; set; }
         public bool Demo { get; set; }
 
         public ReportViewerForm(bool demo = false)
-		{
-			Text = "Report viewer";
-			WindowState = FormWindowState.Maximized;
-			reportViewer = new ReportViewer();
-			reportViewer.Dock = DockStyle.Fill;
-			Controls.Add(reportViewer);
+        {
+            Text = "Report viewer";
+            WindowState = FormWindowState.Maximized;
+            reportViewer = new ReportViewer();
+            reportViewer.Dock = DockStyle.Fill;
+            Controls.Add(reportViewer);
             Demo = demo;
         }
         public ReportViewerForm(FL_IRdlcReport _reportCompiler)
@@ -40,7 +40,7 @@ namespace CliReportCompiler
         }
 
         protected override void OnLoad(EventArgs e)
-		{
+        {
             if (Demo)
             {
 
@@ -119,6 +119,34 @@ namespace CliReportCompiler
             }
             using var fs = new FileStream(reportCompiler.ReportFile, FileMode.Open);
             reportViewer.LocalReport.LoadReportDefinition(fs);
+
+            if (reportCompiler.SubReports.Count > 0)
+            {
+                reportViewer.LocalReport.ShowDetailedSubreportMessages = true;
+
+                foreach (var subReport in reportCompiler.SubReports)
+                {
+                    var subReportName = subReport.Key;
+                    var subReportPath = subReport.Value;
+                    if (string.IsNullOrEmpty(subReportPath))
+                    {
+                        continue;
+                    }
+                    if (File.Exists(subReportPath))
+                    {
+                        var subReportBytes = File.ReadAllBytes(subReportPath);
+                        using var subFs = new MemoryStream(subReportBytes);
+                        reportViewer.LocalReport.LoadSubreportDefinition(subReportName, subFs);
+                    }
+                    else
+                    {
+                        //throw new Exception($"Sub report file not found: {subReportPath}");
+                        continue;
+                    }
+                }
+            }
+            reportViewer.LocalReport.EnableExternalImages = true;
+            reportViewer.LocalReport.EnableHyperlinks = true;
             var rqdParameters = reportViewer.LocalReport.GetParameters().Count;
 
 

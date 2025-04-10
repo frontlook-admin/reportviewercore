@@ -31,6 +31,7 @@ namespace CliReportCompiler
             //{ "Parameters", "p" },
             { "ReportName", "rn" },
             { "Mode", "m" },
+            { "AttachSubReport", "asr" },
             { "ExportFormat", "ef" },
             { "ExportPath", "ep" },
             { "PrintSetupFile", "psf" },
@@ -47,6 +48,8 @@ Options:
   --Mode|-m                 Operation mode: Preview, Print, PrintSetup, or Export.
   --ExportFormat|-ef        Export format: PDF, EXCEL, EXCELOPENXML, WORD, WORDOPENXML, IMAGE, HTML4_0, HTML5, MHTML
   --ExportPath|-ep          Path where the exported file will be saved.
+  --AttachSubReport|-asr    Attach sub report to the main report. => Value should be in the format 'key1 = value1,key2 = value2' where key is the sub report name and value is the path 
+                            to  the sub report file.
   --PrintSetupFile|-psf     Path to the print setup file(JsonFile).
   --Test|-t                 Test message (for debugging purposes).
   --Demo|-d                 Run a demo of the ReportViewer.
@@ -80,6 +83,7 @@ Example:
         }
 
         private static Dictionary<string, string> GetParameters = new();
+        private static Dictionary<string, string> GetSubReports = new();
 
         private static void ParseArguments(string[] args)
         {
@@ -106,23 +110,75 @@ Example:
             {
                 //each argument should have a value and key contains the argument name. in key it contains -- or - as prefix. remove it
 
-                //it should be in the format --key|-key value
-#if DEBUG
+                //it should be in the format --key|-key value// It should be in the format --key|-key value
+                var _key = args[i].TrimStart('-', '-').Trim('"');
+                var key = ParameterNames.FirstOrDefault(x =>
+                    string.Equals(x.Value, _key, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(x.Key, _key, StringComparison.OrdinalIgnoreCase)).Key;
 
-                var _key = args[i].TrimStart('-', '-').TrimStart('"').TrimEnd('"').FL_ConsoleWriteDebug();
-                var key = ParameterNames.FirstOrDefault(x => x.Value.ToUpper() == _key.ToUpper() || x.Key.ToUpper() == _key.ToUpper()).Key;
+                var value = args[i + 1].Trim('"');
 
-                var value = args[i + 1].TrimStart('"').TrimEnd('"').FL_ConsoleWriteDebug();
+                // --AttachSubReport|-asr
 
-#else
+                if (key == "AttachSubReport")
+                {
+                    //check if value is not empty
+                    if (string.IsNullOrEmpty(value))
+                    {
+                        throw new ArgumentException("AttachSubReport value is missing.");
+                    }
+                    //check if value is in the format "key1=value1,key2=value2"
+                    var subReport = value.Split(',');
+                    for (int j = 0; j < subReport.Length; j++)
+                    {
+                        var subReportKeyValue = subReport[j].Split('=');
+                        if (subReportKeyValue.Length != 2)
+                        {
+                            //dont throw exception just continue
+                            //throw new ArgumentException("AttachSubReport value is not in the correct format.");
+                            Console.WriteLine("AttachSubReport value is not in the correct format.");
+                            continue;
+                        }
+                        //check if key is not empty
+                        if (string.IsNullOrEmpty(subReportKeyValue[0]))
+                        {
+                            //throw new ArgumentException("AttachSubReport key is missing.");
+                            Console.WriteLine("AttachSubReport key is missing.");
+                            continue;
 
-                var _key = args[i].TrimStart('-', '-').FL_ConsoleWriteDebug();
-                var key = ParameterNames.FirstOrDefault(x => x.Value.ToUpper() == _key.ToUpper() || x.Key.ToUpper() == _key.ToUpper()).Key;
+                        }
+                        //check if value is not empty
+                        if (string.IsNullOrEmpty(subReportKeyValue[1]))
+                        {
+                            //throw new ArgumentException("AttachSubReport value is missing.");
+                            Console.WriteLine("AttachSubReport value is missing.");
+                            continue;
+                        }
+                        //add the key and value to the dictionary
+                        var subReportKey = subReportKeyValue[0].Trim();
+                        var subReportValue = subReportKeyValue[1].Trim();
 
-                var value = args[i + 1];
-#endif
+                        //check if value exists in file
+                        if (!File.Exists(subReportValue))
+                        {
+                            //throw new ArgumentException("AttachSubReport value file not found.");
+                            Console.WriteLine($"AttachSubReport value file not found: {subReportValue}");
+                            continue;
+                        }
 
-                GetParameters.Add(key, value);
+                        //add the key and value to the dictionary
+                        GetSubReports[subReportKey] = subReportValue;
+
+
+                    }
+
+                    var values = string.Join(",", GetSubReports.Select(x => $"{x.Key}={x.Value}"));
+                    GetParameters.Add(key, values);
+                }
+                else
+                {
+                    GetParameters.Add(key, value);
+                }
             }
         }
 
@@ -270,6 +326,7 @@ Example:
             {
                 DataTables = File.ReadAllText(dsFile).FL_CastXmlToDataSet(),
                 ReportFile = reportPath,
+                SubReports = GetSubReports,
                 ReportName = reportName,
                 PrintSettingFilePath = printSetupFile
             };
