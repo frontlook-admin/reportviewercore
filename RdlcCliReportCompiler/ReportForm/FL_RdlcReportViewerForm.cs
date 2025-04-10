@@ -175,6 +175,8 @@ namespace CliReportCompiler.ReportForm
             using var fs = new FileStream(reportCompiler.ReportFile, FileMode.Open);
             reportViewer.LocalReport.LoadReportDefinition(fs);
 
+            bool ProcessSubReport = false;
+
             if (reportCompiler.SubReports.Count > 0)
             {
                 reportViewer.LocalReport.ShowDetailedSubreportMessages = true;
@@ -192,6 +194,7 @@ namespace CliReportCompiler.ReportForm
                         var subReportBytes = File.ReadAllBytes(subReportPath);
                         using var subFs = new MemoryStream(subReportBytes);
                         reportViewer.LocalReport.LoadSubreportDefinition(subReportName, subFs);
+                        ProcessSubReport = true;
                     }
                     else
                     {
@@ -259,6 +262,24 @@ namespace CliReportCompiler.ReportForm
             {
                 reportViewer.LocalReport.DataSources.Add(new ReportDataSource(x.TableName, x));
             });
+
+
+
+            if (ProcessSubReport)
+            {
+                // Handle subreport data source
+
+                reportViewer.LocalReport.SubreportProcessing += (sender, e) =>
+                {
+
+
+                    reportCompiler.DataTables.Tables.Cast<DataTable>().ToList().ForEach(x =>
+                    {
+                        // Pass the same datasets to the subreport
+                        e.DataSources.Add(new ReportDataSource(x.TableName, x));
+                    });
+                };
+            }
 
             //add print settings file path
             if (!string.IsNullOrEmpty(reportCompiler.PrintSettingFilePath))
