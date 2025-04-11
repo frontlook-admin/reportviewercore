@@ -1,4 +1,3 @@
-
 using Microsoft.ReportingServices.Common;
 using Microsoft.ReportingServices.Interfaces;
 using Microsoft.ReportingServices.Rendering.SPBProcessing;
@@ -161,33 +160,33 @@ namespace Microsoft.Reporting.WinForms
             }
         }
 
-		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-		public override System.Drawing.Image BackgroundImage
-		{
-			get
-			{
-				return base.BackgroundImage;
-			}
-			set
-			{
-				base.BackgroundImage = value;
-				winRSviewer.BackgroundImage = value;
-			}
-		}
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public override System.Drawing.Image BackgroundImage
+        {
+            get
+            {
+                return base.BackgroundImage;
+            }
+            set
+            {
+                base.BackgroundImage = value;
+                winRSviewer.BackgroundImage = value;
+            }
+        }
 
-		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-		public override ImageLayout BackgroundImageLayout
-		{
-			get
-			{
-				return base.BackgroundImageLayout;
-			}
-			set
-			{
-				base.BackgroundImageLayout = value;
-				winRSviewer.BackgroundImageLayout = value;
-			}
-		}
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public override ImageLayout BackgroundImageLayout
+        {
+            get
+            {
+                return base.BackgroundImageLayout;
+            }
+            set
+            {
+                base.BackgroundImageLayout = value;
+                winRSviewer.BackgroundImageLayout = value;
+            }
+        }
 
         [Category("Appearance")]
         [DefaultValue(100)]
@@ -681,6 +680,7 @@ namespace Microsoft.Reporting.WinForms
 
         internal ProcessingThread BackgroundThread => m_processingThread;
 
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public PageSettings CurrentReportPageSetting
         {
             get => CurrentReport.PageSettings;
@@ -690,6 +690,7 @@ namespace Microsoft.Reporting.WinForms
             }
         }
 
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public bool MetricEnabled { get; set; }
 
         internal ReportInfo CurrentReport
@@ -1886,7 +1887,9 @@ namespace Microsoft.Reporting.WinForms
             return PrintDialog(CreateDefaultPrintSettings());
         }
 
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public string PrintSettingFilePath { get; set; }
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public CustomPrintDialog CustomPrintDialog { get; set; }
 
         // save print settings for next time
@@ -1901,7 +1904,6 @@ namespace Microsoft.Reporting.WinForms
             {
                 File.WriteAllText(PrintSettingFilePath, CustomPrintDialog.CastToJson());
             }
-
         }
 
         public void SetPrinterAndPageSettings()
