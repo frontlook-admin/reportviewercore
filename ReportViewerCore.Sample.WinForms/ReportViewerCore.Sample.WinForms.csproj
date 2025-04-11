@@ -17,14 +17,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<!--<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreDbAccessLibrary\FrontLookCoreDbAccessLibrary.Desktop.Rdlc\FrontLookCoreDbAccessLibrary.Desktop.Rdlc.csproj" />-->
-		<ProjectReference Include="..\Microsoft.ReportViewer.WinForms\Microsoft.ReportViewer.WinForms.csproj" />
-	</ItemGroup>
-
-	<ItemGroup>
 		<PackageReference Include="FrontLookCoreDbAccessLibrary.Desktop.Rdlc" Version="$(FrontLook)">
 			<ExcludeAssets>contentFiles</ExcludeAssets>
 		</PackageReference>
+		<ProjectReference Include="..\Microsoft.ReportViewer.WinForms\Microsoft.ReportViewer.WinForms.csproj" />
 	</ItemGroup>
 	<ItemGroup>
 		<Compile Update="FL_RldcReportViewerForm.cs">

@@ -5,7 +5,6 @@ using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using JetBrains.Annotations;
 using System.ComponentModel;
 using Newtonsoft.Json;
 
@@ -38,7 +37,7 @@ namespace ReportViewerCore.Sample.WinForms
         public virtual string GlGroupName { get; set; }
 
         [Display(Name = "General Ledger Sub Type")]
-        [CanBeNull]
+
         public virtual int? GlSubGroup { get; set; }
         [NotMapped]
         public virtual string T_GlSubGroupName { get; set; }
@@ -46,15 +45,15 @@ namespace ReportViewerCore.Sample.WinForms
         public virtual string GlSubGroupName { get; set; }
 
         [Display(Name = "Enable SubLedger")]
-        [CanBeNull]
+
         public virtual bool? EnableSubLedger { get; set; }//Default False
 
         [Display(Name = "Openning Balance")]
-        [CanBeNull]
+
         public virtual double? OpenningBalance { get; set; }
 
         [Display(Name = "Dr / Cr")]
-        [CanBeNull]
+
         [MaxLength(2)]
         public virtual string DrCr { get; set; }
 
@@ -232,55 +231,55 @@ namespace ReportViewerCore.Sample.WinForms
         public virtual string CompanyNameWithSession => CompanyName + $"({SessionFrom.GetValueOrDefault():yyyy-MM} To {SessionTo.GetValueOrDefault():yyyy-MM})";
 
         public virtual string CompanyCode { get; set; }
-        [CanBeNull]
+
         [DataType(DataType.Text)]
         public virtual string Address1 { get; set; }
-        [CanBeNull]
+
         [DataType(DataType.Text)]
         public virtual string Address2 { get; set; }
-        [CanBeNull]
+
         [DataType(DataType.Text)]
         public virtual string Address3 { get; set; }
-        [CanBeNull]
+
         [DataType(DataType.Text)]
         public virtual string City { get; set; }
-        [CanBeNull]
+
         [DataType(DataType.PostalCode)]
         public virtual string Pincode { get; set; }
-        [CanBeNull]
+
         public virtual string State { get; set; }
-        [CanBeNull]
+
         public virtual string Country { get; set; }
-        [CanBeNull]
+
         [DataType(DataType.PhoneNumber)]
         public virtual string Phone { get; set; }
-        [CanBeNull]
+
         [DataType(DataType.EmailAddress)]
         public virtual string Email { get; set; }
-        [CanBeNull]
+
         public virtual string GstNo { get; set; }
 
 
 
         #region Bank Details
-        [CanBeNull]
+
         [DataType(DataType.Text)]
         public virtual string AccountNumber { get; set; }
-        [CanBeNull]
+
         [DataType(DataType.Text)]
         public virtual string IfscCode { get; set; }
-        [CanBeNull]
+
         [DataType(DataType.Text)]
         public virtual string BankName { get; set; }
-        [CanBeNull]
+
         [DataType(DataType.Text)]
         public virtual string BankBranch { get; set; }
-        [CanBeNull]
+
         [DataType(DataType.Text)]
         public virtual string BankAddress { get; set; }
-        [CanBeNull]
+
         public virtual string MicrCode { get; set; }
-        [CanBeNull]
+
         [DataType(DataType.Text)]
         public virtual string SwiftCode { get; set; }
         #endregion
@@ -299,12 +298,12 @@ namespace ReportViewerCore.Sample.WinForms
         public virtual DateTime? To { get; set; }
         [NotMapped]
         public string DataBaseStatus { get; set; }
-        [CanBeNull]
+
         [DefaultValue(0)]
         public virtual long ParentPosition { get; set; }
-        //[CanBeNull]
+        //
         //public virtual long OwnerId { get; set; }
-        [CanBeNull]
+
         public virtual string ParentCompanyId { get; set; }
     }
 

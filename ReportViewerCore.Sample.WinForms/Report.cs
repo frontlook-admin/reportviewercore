@@ -2,6 +2,7 @@
 using FrontLookCoreLibraryAssembly.FL_General;
 using Microsoft.Reporting.WinForms;
 using Microsoft.ReportingServices.ReportProcessing.ReportObjectModel;
+using Microsoft.ReportViewer.Common.FrontLookCode;
 using ReportViewerCore.Sample.WinForms;
 using System;
 using System.Collections.Generic;
@@ -18,7 +19,7 @@ namespace ReportViewerCore
         {
             var items = new[] { new ReportItem { Description = "Widget 6000", Price = 104.99m, Qty = 1 }, new ReportItem { Description = "Gizmo MAX", Price = 1.41m, Qty = 25 } };
             //var jsonFile = File.ReadAllText(@"SaleBill_Thermal1.json");
-            //var dt = jsonFile.FL_CastToClass<List<RdlcData>>();
+            //var dt = jsonFile.CastToClass<List<RdlcData>>();
             //dt.ForEach(x => report.DataSources.Add(new ReportDataSource(x.DataName, x.DataValue)));
 
 
@@ -39,7 +40,7 @@ namespace ReportViewerCore
         public static void Loadx(LocalReport report)
         {
             var jsonFile = File.ReadAllText(@"Trial_Balance_Report.json");
-            var dt = jsonFile.FL_CastToClass<List<RdlcDatal>>();
+            var dt = jsonFile.CastToClass<List<RdlcDatal>>();
 
             //var parameters = new[] { new ReportParameter("Title", "Invoice 4/2020") };
 
@@ -67,16 +68,16 @@ namespace ReportViewerCore
                 if (x.DataName == "CompanyInfos")
                 {
 
-                    dataTables.Tables.Add((x.DataValue.FL_CastToClass<CompanyInfoVReport>()).FL_ConvertToDataTable(x.DataName));
+                    dataTables.Tables.Add((x.DataValue.CastToClass<CompanyInfoVReport>()).FL_ConvertToDataTable(x.DataName));
 
-                    report.DataSources.Add(new ReportDataSource(x.DataName, (x.DataValue.FL_CastToClass<CompanyInfoVReport>()).FL_ConvertToDataTable(x.DataName)));
+                    report.DataSources.Add(new ReportDataSource(x.DataName, (x.DataValue.CastToClass<CompanyInfoVReport>()).FL_ConvertToDataTable(x.DataName)));
 
                 }
                 if (x.DataName == "MGeneralLedgers")
                 {
-                    dataTables.Tables.Add((x.DataValue.FL_CastToClass<MGeneralLedgerVReport>()).FL_ConvertToDataTable(x.DataName));
+                    dataTables.Tables.Add((x.DataValue.CastToClass<MGeneralLedgerVReport>()).FL_ConvertToDataTable(x.DataName));
 
-                    report.DataSources.Add(new ReportDataSource(x.DataName, (x.DataValue.FL_CastToClass<MGeneralLedgerVReport>()).FL_ConvertToDataTable(x.DataName)));
+                    report.DataSources.Add(new ReportDataSource(x.DataName, (x.DataValue.CastToClass<MGeneralLedgerVReport>()).FL_ConvertToDataTable(x.DataName)));
                 }
 
             });
@@ -85,7 +86,7 @@ namespace ReportViewerCore
         public static void Loady(LocalReport report)
         {
             var jsonFile = File.ReadAllText(@"Trial_Balance_Report.json");
-            var dt = jsonFile.FL_CastToClass<List<RdlcDatal>>();
+            var dt = jsonFile.CastToClass<List<RdlcDatal>>();
 
             var dataTables = new DataSet();
 
@@ -95,13 +96,13 @@ namespace ReportViewerCore
                 if (x.DataName == "CompanyInfos")
                 {
 
-                    dataTables.Tables.Add((x.DataValue.FL_CastToClass<CompanyInfoVReport>()).FL_ConvertToDataTable(x.DataName));
+                    dataTables.Tables.Add((x.DataValue.CastToClass<CompanyInfoVReport>()).FL_ConvertToDataTable(x.DataName));
 
 
                 }
                 if (x.DataName == "MGeneralLedgers")
                 {
-                    dataTables.Tables.Add((x.DataValue.FL_CastToClass<MGeneralLedgerVReport>()).FL_ConvertToDataTable(x.DataName));
+                    dataTables.Tables.Add((x.DataValue.CastToClass<MGeneralLedgerVReport>()).FL_ConvertToDataTable(x.DataName));
 
                 }
 
