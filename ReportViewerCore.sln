@@ -26,6 +26,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.ReportViewer.Data
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.ReportViewer.Common", "Microsoft.ReportViewer.Common\Microsoft.ReportViewer.Common.csproj", "{947A8241-02F5-BAA5-E44C-58D0FE1176B9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FrontLookCoreDbAccesLibrary.Rdlc", "..\..\frontlook-admin\FrontLookCore\FrontLookCoreDbAccessLibrary\FrontLookCoreDbAccesLibrary.Rdlc\FrontLookCoreDbAccesLibrary.Rdlc.csproj", "{899AA39E-99BF-1664-AD45-7ED8FDA3F7E7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FrontLookCoreDbAccessLibrary.Desktop.Rdlc", "..\..\frontlook-admin\FrontLookCore\FrontLookCoreDbAccessLibrary\FrontLookCoreDbAccessLibrary.Desktop.Rdlc\FrontLookCoreDbAccessLibrary.Desktop.Rdlc.csproj", "{484CB86C-EE97-1AC9-FE53-7D9D6F2DC5AE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FrontLookCoreLibraryAssembly", "..\..\frontlook-admin\FrontLookCore\FrontLookCoreLibraryAssembly\FrontLookCoreLibraryAssembly.csproj", "{DE5F4E2D-3903-6D78-844E-2F72A0B75F1F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -114,6 +120,30 @@ Global
 		{947A8241-02F5-BAA5-E44C-58D0FE1176B9}.Release|Any CPU.Build.0 = Release|Any CPU
 		{947A8241-02F5-BAA5-E44C-58D0FE1176B9}.Release|x86.ActiveCfg = Release|Any CPU
 		{947A8241-02F5-BAA5-E44C-58D0FE1176B9}.Release|x86.Build.0 = Release|Any CPU
+		{899AA39E-99BF-1664-AD45-7ED8FDA3F7E7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{899AA39E-99BF-1664-AD45-7ED8FDA3F7E7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{899AA39E-99BF-1664-AD45-7ED8FDA3F7E7}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{899AA39E-99BF-1664-AD45-7ED8FDA3F7E7}.Debug|x86.Build.0 = Debug|Any CPU
+		{899AA39E-99BF-1664-AD45-7ED8FDA3F7E7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{899AA39E-99BF-1664-AD45-7ED8FDA3F7E7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{899AA39E-99BF-1664-AD45-7ED8FDA3F7E7}.Release|x86.ActiveCfg = Release|Any CPU
+		{899AA39E-99BF-1664-AD45-7ED8FDA3F7E7}.Release|x86.Build.0 = Release|Any CPU
+		{484CB86C-EE97-1AC9-FE53-7D9D6F2DC5AE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{484CB86C-EE97-1AC9-FE53-7D9D6F2DC5AE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{484CB86C-EE97-1AC9-FE53-7D9D6F2DC5AE}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{484CB86C-EE97-1AC9-FE53-7D9D6F2DC5AE}.Debug|x86.Build.0 = Debug|Any CPU
+		{484CB86C-EE97-1AC9-FE53-7D9D6F2DC5AE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{484CB86C-EE97-1AC9-FE53-7D9D6F2DC5AE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{484CB86C-EE97-1AC9-FE53-7D9D6F2DC5AE}.Release|x86.ActiveCfg = Release|Any CPU
+		{484CB86C-EE97-1AC9-FE53-7D9D6F2DC5AE}.Release|x86.Build.0 = Release|Any CPU
+		{DE5F4E2D-3903-6D78-844E-2F72A0B75F1F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DE5F4E2D-3903-6D78-844E-2F72A0B75F1F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DE5F4E2D-3903-6D78-844E-2F72A0B75F1F}.Debug|x86.ActiveCfg = Debug|x86
+		{DE5F4E2D-3903-6D78-844E-2F72A0B75F1F}.Debug|x86.Build.0 = Debug|x86
+		{DE5F4E2D-3903-6D78-844E-2F72A0B75F1F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DE5F4E2D-3903-6D78-844E-2F72A0B75F1F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DE5F4E2D-3903-6D78-844E-2F72A0B75F1F}.Release|x86.ActiveCfg = Release|x86
+		{DE5F4E2D-3903-6D78-844E-2F72A0B75F1F}.Release|x86.Build.0 = Release|x86
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
