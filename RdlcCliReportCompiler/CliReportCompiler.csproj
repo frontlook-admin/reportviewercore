@@ -72,19 +72,23 @@
 		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreDbAccessLibrary\FrontLookCoreDbAccessLibrary.Desktop.Rdlc\FrontLookCoreDbAccessLibrary.Desktop.Rdlc.csproj" />
 	</ItemGroup>
 
+	<!--
 	<ItemGroup Condition="'$(Configuration)'!='Debug'">
+		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreLibraryAssembly\FrontLookCoreLibraryAssembly.csproj">
+
+			<ExcludeAssets>contentFiles</ExcludeAssets>
+		</ProjectReference>
+		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreDbAccessLibrary\FrontLookCoreDbAccessLibrary.Desktop.Rdlc\FrontLookCoreDbAccessLibrary.Desktop.Rdlc.csproj" />
+	</ItemGroup>
+
+-->
+	<ItemGroup>
 		<PackageReference Include="FrontLookCoreLibraryAssembly" Version="$(FrontLook)">
 			<ExcludeAssets>contentFiles</ExcludeAssets>
 		</PackageReference>
 		<PackageReference Include="FrontLookCoreDbAccessLibrary.Desktop.Rdlc" Version="$(FrontLook)" />
+		<!--kageReference Include="Microsoft.DependencyValidation.Analyzers" Version="0.11.0" />-->
 	</ItemGroup>
-	<!--
-	<ItemGroup>
-		<PackageReference Include="FrontLookCoreLibraryAssembly" Version="$(FrontLook)" />
-		<PackageReference Include="FrontLookCoreDbAccessLibrary.Desktop.Rdlc" Version="$(FrontLook)" />
-	</ItemGroup>
-
--->
 
 	<ItemGroup>
 		<None Update="AccLead.xsd">
