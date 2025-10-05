@@ -22,11 +22,6 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="FrontLookCoreDbAccessLibrary.Desktop.Rdlc" Version="$(FrontLook)">
-			<ExcludeAssets>contentFiles</ExcludeAssets>
-		</PackageReference>
-	</ItemGroup>
-	<ItemGroup>
 		<Compile Update="FL_RldcReportViewerForm.cs">
 			<SubType>Form</SubType>
 		</Compile>
@@ -67,6 +62,16 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreLibraryAssembly\FrontLookCoreLibraryAssembly.csproj" />
+		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreDbAccessLibrary\FrontLookCoreDbAccessLibrary.Desktop.Rdlc\FrontLookCoreDbAccessLibrary.Desktop.Rdlc.csproj" />
 	</ItemGroup>
-
+	<!--
+	<ItemGroup>
+		<PackageReference Include="FrontLookCoreDbAccessLibrary.Desktop.Rdlc" Version="$(FrontLook)">
+			<ExcludeAssets>contentFiles</ExcludeAssets>
+		</PackageReference>
+		<PackageReference Include="FrontLookCoreLibraryAssembly" Version="$(FrontLook)">
+			<ExcludeAssets>contentFiles</ExcludeAssets>
+		</PackageReference>
+	</ItemGroup>
+	-->
 </Project>
