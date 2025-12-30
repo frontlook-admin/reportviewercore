@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../FrontLookCore/FluentReportWriter"
+		},
+		{
+			"path": "../FrontLookCore/FrontLookCoreLibraryAssembly"
+		}
+	],
+	"settings": {}
+}
