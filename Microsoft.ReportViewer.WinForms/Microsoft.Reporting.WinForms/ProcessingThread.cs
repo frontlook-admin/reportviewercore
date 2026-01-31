@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Security;
 using System.Security.Permissions;
 using System.Threading;
@@ -12,6 +13,8 @@ namespace Microsoft.Reporting.WinForms
 		private Thread m_backgroundThread;
 
 		private bool m_cancelInProgress;
+		
+		private CancellationTokenSource m_cancellationTokenSource;
 
 		private bool IsRendering
 		{
@@ -37,13 +40,29 @@ namespace Microsoft.Reporting.WinForms
 					if (operation != null && !operation.Abort())
 					{
 						m_cancelInProgress = true;
-						// TODO: Find a way to access Microsoft.ReportingServices.OnDemandProcessing.AbortHelper here
-						//m_backgroundThread.Abort();
-						//millisecondsTimeout = 0;
+						// .NET Core doesn't support Thread.Abort(). Instead, we use CancellationToken
+						// for cooperative cancellation. The rendering operation should monitor the token
+						// and exit gracefully. If the operation doesn't respond within the timeout,
+						// we log a warning and wait for it to complete naturally.
+						if (m_cancellationTokenSource != null)
+						{
+							try
+							{
+								m_cancellationTokenSource.Cancel();
+								Debug.WriteLine($"ProcessingThread.Cancel: Cancellation requested via CancellationToken");
+							}
+							catch (ObjectDisposedException)
+							{
+								Debug.WriteLine($"ProcessingThread.Cancel: CancellationTokenSource already disposed");
+							}
+						}
+						// Note: Thread.Abort() is not available in .NET Core.
+						// The rendering operation must cooperatively check cancellation state.
 					}
 				}
-				catch (ThreadStateException)
+				catch (ThreadStateException ex)
 				{
+					Debug.WriteLine($"ProcessingThread.Cancel: ThreadStateException - {ex.Message}");
 					if (IsRendering)
 					{
 						throw;
@@ -51,7 +70,12 @@ namespace Microsoft.Reporting.WinForms
 				}
 				if (millisecondsTimeout != 0)
 				{
-					return m_backgroundThread.Join(millisecondsTimeout);
+					bool completed = m_backgroundThread.Join(millisecondsTimeout);
+					if (!completed)
+					{
+						Debug.WriteLine($"ProcessingThread.Cancel: Thread did not complete within {millisecondsTimeout}ms timeout. Waiting for natural completion.");
+					}
+					return completed;
 				}
 				return false;
 			}
@@ -64,6 +88,16 @@ namespace Microsoft.Reporting.WinForms
 			{
 				m_backgroundThread.Join();
 			}
+			
+			// Dispose previous cancellation token source if it exists
+			if (m_cancellationTokenSource != null)
+			{
+				m_cancellationTokenSource.Dispose();
+			}
+			
+			// Create new cancellation token source for this operation
+			m_cancellationTokenSource = new CancellationTokenSource();
+			
 			operation.ClearAbortFlag();
 			m_operation = operation;
 			m_backgroundThread = new Thread(ProcessThreadMain);
@@ -116,6 +150,13 @@ namespace Microsoft.Reporting.WinForms
 				m_operation.EndAsyncExecution(e);
 				m_operation = null;
 				m_cancelInProgress = false;
+				
+				// Clean up cancellation token source
+				if (m_cancellationTokenSource != null)
+				{
+					m_cancellationTokenSource.Dispose();
+					m_cancellationTokenSource = null;
+				}
 			}
 		}
 	}

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
@@ -306,8 +307,9 @@ namespace Microsoft.Reporting.WinForms
 					m_paramInfos = Report.GetParameters();
 					m_paramLayout = Report.GetParametersPaneLayout();
 				}
-				catch (Exception)
+				catch (Exception ex)
 				{
+					Debug.WriteLine($"RSParams: Failed to get parameters or layout: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}");
 				}
 				promptPanel.ResumeLayout();
 				promptPanel.AutoScroll = true;

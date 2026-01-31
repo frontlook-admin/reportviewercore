@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Drawing.Printing;
 using System.Timers;
 
@@ -52,7 +53,15 @@ namespace Microsoft.Reporting.WinForms
 
 		public void Dispose()
 		{
-			StopTimer();
+			try
+			{
+				StopTimer();
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine($"ReportInfo.Dispose: Error stopping timer: {ex.GetType().Name} - {ex.Message}");
+			}
+			
 			m_fileManager.Clean();
 			m_localReport.Dispose();
 			ClearGdiPage();
@@ -92,8 +101,21 @@ namespace Microsoft.Reporting.WinForms
 				DisposeTimer();
 				if (m_useTimer)
 				{
-					m_serverReport.ExecutionIDChanged -= OnServerExecutionIdChanged;
-					m_useTimer = false;
+					try
+					{
+						if (m_serverReport != null)
+						{
+							m_serverReport.ExecutionIDChanged -= OnServerExecutionIdChanged;
+						}
+					}
+					catch (Exception ex)
+					{
+						Debug.WriteLine($"ReportInfo.StopTimer: Error unsubscribing event: {ex.GetType().Name} - {ex.Message}");
+					}
+					finally
+					{
+						m_useTimer = false;
+					}
 				}
 			}
 		}

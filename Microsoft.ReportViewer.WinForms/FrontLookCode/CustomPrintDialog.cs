@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing.Printing;
 using System.Linq;
 using System.Text;
@@ -84,8 +85,9 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
 
                 return m;
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine($"CustomPageSetting.GetSetupMargin: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}");
                 return Margins;
             }
         }
@@ -104,8 +106,9 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
                     PrinterResolution = PrinterResolution
                 };
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine($"CustomPageSetting.GetSetupPageSettings: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}");
                 return new PageSettings()
                 {
                     Color = Color,
@@ -129,6 +132,11 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
 
         public CustomPrintDialog(PrinterSettings PrinterSettings, PageSettings pageSettings, PrintType printType = PrintType.Mod)
         {
+            if (PrinterSettings == null)
+                throw new ArgumentNullException(nameof(PrinterSettings));
+            if (pageSettings == null)
+                throw new ArgumentNullException(nameof(pageSettings));
+
             PrinterName = PrinterSettings.PrinterName;
             Copies = PrinterSettings.Copies;
             Collate = PrinterSettings.Collate;
@@ -156,6 +164,11 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
         }
         public CustomPrintDialog(PrintDialog printDialog, PageSettings pageSettings, PrintType printType = PrintType.Mod)
         {
+            if (printDialog == null)
+                throw new ArgumentNullException(nameof(printDialog));
+            if (pageSettings == null)
+                throw new ArgumentNullException(nameof(pageSettings));
+
             PrinterName = printDialog.PrinterSettings.PrinterName;
             Copies = printDialog.PrinterSettings.Copies;
             Collate = printDialog.PrinterSettings.Collate;
@@ -184,6 +197,9 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
 
         public CustomPrintDialog(PrintDialog printDialog, PrintType printType = PrintType.Mod)
         {
+            if (printDialog == null)
+                throw new ArgumentNullException(nameof(printDialog));
+
             PrinterName = printDialog.PrinterSettings.PrinterName;
             Copies = printDialog.PrinterSettings.Copies;
             Collate = printDialog.PrinterSettings.Collate;
@@ -207,6 +223,9 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
 
         public CustomPrintDialog(string JsonData)
         {
+            if (string.IsNullOrWhiteSpace(JsonData))
+                throw new ArgumentException("JSON data cannot be null or empty.", nameof(JsonData));
+
             var printDialog = JsonData.CastToClass<CustomPrintDialog>();
             PrinterName = printDialog.PrinterName;
             AllowSomePages = printDialog.AllowSomePages;
@@ -260,6 +279,38 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
             return CPageSettings.GetSetupPageSettings();
         }
 
+        /// <summary>
+        /// Gets print dialog settings without creating undisposed resources.
+        /// This is the recommended method for retrieving print settings.
+        /// </summary>
+        /// <returns>A PrintDialogSettings object containing all print configuration.</returns>
+        public virtual PrintDialogSettings GetPrintDialogSettings()
+        {
+            var settings = new PrintDialogSettings
+            {
+                PrinterName = PrinterName,
+                AllowSomePages = AllowSomePages,
+                AllowSelection = AllowSelection,
+                AllowPrintToFile = AllowPrintToFile,
+                PrintToFile = PrintToFile,
+                UseEXDialog = UseEXDialog,
+                ShowNetwork = ShowNetwork,
+                PrintRange = PrintRange,
+                Copies = Copies,
+                Collate = Collate,
+                PaperSize = PaperSize,
+                Landscape = Landscape,
+                CPageSettings = CPageSettings,
+                PrintType = PrintType
+            };
+            return settings;
+        }
+
+        /// <summary>
+        /// Gets a PrintDialog object configured with current settings.
+        /// </summary>
+        /// <returns>A configured PrintDialog. The caller is responsible for disposing this object.</returns>
+        [Obsolete("Use GetPrintDialogSettings() instead. This method creates undisposed resources.", false)]
         public virtual PrintDialog GetPrintDialog()
         {
             var pd = new PrintDialog();
@@ -341,6 +392,7 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
             }
             catch (Exception ex)
             {
+                Debug.WriteLine($"CustomPrintDialog.GetPrintDialog: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}");
                 var pf = new PrintDialog();
 
                 pf.AllowSomePages = true;

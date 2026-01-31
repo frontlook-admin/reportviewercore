@@ -135,7 +135,7 @@ namespace Microsoft.Reporting.WinForms
 
         public async Task<byte[]> RenderAsync(string format)
 		{
-			return await Task.Run(() => Render(format));
+			return await Task.Run(() => Render(format)).ConfigureAwait(false);
 		}
 
 		public byte[] Render(string format)

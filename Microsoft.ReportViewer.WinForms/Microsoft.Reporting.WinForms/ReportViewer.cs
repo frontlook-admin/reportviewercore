@@ -1903,117 +1903,168 @@ namespace Microsoft.Reporting.WinForms
 
         }
 
+        /// <summary>
+        /// Loads printer settings from file or creates default settings.
+        /// </summary>
+        private CustomPrintDialog LoadPrinterSettingsFromFile()
+        {
+            if (File.Exists(PrintSettingFilePath))
+            {
+                try
+                {
+                    var printSettingsTxt = File.ReadAllText(PrintSettingFilePath);
+                    var customDialog = printSettingsTxt.FL_CastToClass<CustomPrintDialog>();
+                    if (customDialog != null)
+                    {
+                        return customDialog;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"LoadPrinterSettingsFromFile: Failed to load from file: {ex.GetType().Name} - {ex.Message}");
+                }
+            }
+            
+            // Fallback to default settings
+            var pageSetting = GetPageSettings();
+            return new CustomPrintDialog(PrinterSettings, pageSetting);
+        }
+
+        /// <summary>
+        /// Applies page settings to a print dialog's default page settings.
+        /// </summary>
+        private void ApplyPageSettingsToPrintDialog(PrintDialog printDialog, PageSettings pageSettings)
+        {
+            if (printDialog == null)
+                throw new ArgumentNullException(nameof(printDialog));
+            if (pageSettings == null)
+                throw new ArgumentNullException(nameof(pageSettings));
+                
+            var defaultSettings = printDialog.PrinterSettings.DefaultPageSettings;
+            defaultSettings.PaperSize = pageSettings.PaperSize;
+            defaultSettings.Landscape = pageSettings.Landscape;
+            defaultSettings.Margins = pageSettings.Margins;
+            defaultSettings.Color = pageSettings.Color;
+            defaultSettings.PaperSource = pageSettings.PaperSource;
+            defaultSettings.PrinterResolution = pageSettings.PrinterResolution;
+        }
+
+        /// <summary>
+        /// Saves the current print settings to the configured file path.
+        /// </summary>
+        private void SavePrintSettingsToFile(CustomPrintDialog printDialog)
+        {
+            if (printDialog == null)
+                throw new ArgumentNullException(nameof(printDialog));
+                
+            if (!string.IsNullOrEmpty(PrintSettingFilePath))
+            {
+                try
+                {
+                    var json = printDialog.FL_CastToJson();
+                    File.WriteAllText(PrintSettingFilePath, json);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"SavePrintSettingsToFile: Failed to save: {ex.GetType().Name} - {ex.Message}");
+                    throw; // Re-throw to let caller handle
+                }
+            }
+        }
+
+        /// <summary>
+        /// Handles the successful path of printer and page settings configuration.
+        /// </summary>
+        private void HandleSuccessfulSettingsConfiguration(PrinterSettings printerSettings, CustomPrintDialog printDialog)
+        {
+            PrinterSettings = printerSettings;
+            
+            try
+            {
+                SavePrintSettingsToFile(printDialog);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"HandleSuccessfulSettingsConfiguration: Could not save settings: {ex.Message}");
+                // Continue even if save fails
+            }
+            
+            RefreshReport();
+        }
+
+        /// <summary>
+        /// Handles the error path when initial printer settings configuration fails.
+        /// </summary>
+        private void HandleSettingsConfigurationError()
+        {
+            CustomPrintDialog loadedDialog = LoadPrinterSettingsFromFile();
+            
+            using (var pd = loadedDialog?.GetPrintDialog())
+            {
+                if (pd != null && loadedDialog != null)
+                {
+                    var setUpPgSetting = loadedDialog.CPageSettings?.GetSetupPageSettings();
+                    if (setUpPgSetting != null)
+                    {
+                        ApplyPageSettingsToPrintDialog(pd, setUpPgSetting);
+                    }
+                    
+                    if (pd.ShowDialog() == DialogResult.OK)
+                    {
+                        PrinterSettings = pd.PrinterSettings;
+                        PageSetupDialog();
+                        
+                        CustomPrintDialog = new CustomPrintDialog(pd, CurrentReportPageSetting);
+                        SavePrintSetting();
+                        RefreshReport();
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Sets up printer and page settings using configuration file.
+        /// This method orchestrates the printer configuration workflow.
+        /// </summary>
         public void SetPrinterAndPageSettings()
         {
             if (PrintSettingFilePath == null)
             {
                 MessageBox.Show("Print Setting File Path is not set");
+                return;
             }
-            else
+
+            try
             {
-
-                //reportViewer.PageSetupDialog();
-                try
+                var pageSetting = GetPageSettings();
+                var printSettings = new CustomPrintDialog(PrinterSettings, pageSetting);
+                
+                PrinterSettings configuredSettings;
+                
+                using (var pd = printSettings?.GetPrintDialog())
                 {
-
-                    var pageSetting = GetPageSettings();
-                    var _PrintSettings = new CustomPrintDialog(PrinterSettings, pageSetting);
-
-                    PrinterSettings ps = new PrinterSettings();
-
-                    using (var pd = _PrintSettings?.GetPrintDialog())
+                    if (pd == null)
                     {
-
-
-                        pd.PrinterSettings.DefaultPageSettings.PaperSize = pageSetting.PaperSize;
-                        pd.PrinterSettings.DefaultPageSettings.Landscape = pageSetting.Landscape;
-                        pd.PrinterSettings.DefaultPageSettings.Margins = pageSetting.Margins;
-                        pd.PrinterSettings.DefaultPageSettings.Color = pageSetting.Color;
-                        pd.PrinterSettings.DefaultPageSettings.PaperSource = pageSetting.PaperSource;
-                        pd.PrinterSettings.DefaultPageSettings.PrinterResolution = pageSetting.PrinterResolution;
-
-                        ps = GetPrintDialog(pd);
-
+                        throw new InvalidOperationException("Failed to create print dialog");
                     }
-                    var pdz = new PrintDialog();
-                    pdz.PrinterSettings = ps;
-
-
-
-                    var ddr = PageSetupDialog();
-
-
-                    if (ddr == DialogResult.OK)
-                    {
-                        //CurrentReport.PageSettings = pageSetupDialog.PageSettings;
-                        //PrinterSettings = pageSetupDialog.PrinterSettings;
-
-
-                        PrinterSettings = ps;
-
-                        //update the page settings and printersettings in reportcompiler
-                        _PrintSettings = new CustomPrintDialog(pdz, CurrentReportPageSetting);
-                        if (!string.IsNullOrEmpty(PrintSettingFilePath))
-                        {
-                            //update the compiler print settings file
-                            var json = _PrintSettings.FL_CastToJson();
-                            File.WriteAllText(PrintSettingFilePath, json);
-                        }
-
-                        RefreshReport();
-                    }
+                    
+                    ApplyPageSettingsToPrintDialog(pd, pageSetting);
+                    configuredSettings = GetPrintDialog(pd);
                 }
-                catch (Exception e)
+                
+                var updatedDialog = new PrintDialog { PrinterSettings = configuredSettings };
+                var dialogResult = PageSetupDialog();
+
+                if (dialogResult == DialogResult.OK)
                 {
-
-                    if (File.Exists(PrintSettingFilePath))
-                    {
-                        try
-                        {
-                            var customPrintDialog = File.ReadAllText(PrintSettingFilePath).FL_CastToClass<CustomPrintDialog>();
-
-                            CustomPrintDialog = customPrintDialog;
-                        }
-                        catch (Exception ex)
-                        {
-                            var pageSetting = GetPageSettings();
-                            CustomPrintDialog = new CustomPrintDialog(PrinterSettings, pageSetting);
-
-                        }
-                    }
-
-                    var pd = CustomPrintDialog?.GetPrintDialog();
-                    var _setUpPgSetting = CustomPrintDialog.GetSetupPageSettings();
-                    var setUpPgSetting = CustomPrintDialog.CPageSettings.GetSetupPageSettings();
-                    pd.PrinterSettings.DefaultPageSettings.PaperSize = setUpPgSetting.PaperSize;
-                    pd.PrinterSettings.DefaultPageSettings.Landscape = setUpPgSetting.Landscape;
-                    pd.PrinterSettings.DefaultPageSettings.Margins = setUpPgSetting.Margins;
-                    pd.PrinterSettings.DefaultPageSettings.Color = setUpPgSetting.Color;
-                    pd.PrinterSettings.DefaultPageSettings.PaperSource = setUpPgSetting.PaperSource;
-                    pd.PrinterSettings.DefaultPageSettings.PrinterResolution = setUpPgSetting.PrinterResolution;
-                    pd.ShowDialog();
-
-                    PrinterSettings = pd.PrinterSettings;
-
-                    PageSetupDialog();
-
-                    //update the page settings and printersettings in reportcompiler
-                    CustomPrintDialog = new CustomPrintDialog(pd, CurrentReportPageSetting);
-
-                    SavePrintSetting();
-
-                    RefreshReport();
+                    var finalPrintSettings = new CustomPrintDialog(updatedDialog, CurrentReportPageSetting);
+                    HandleSuccessfulSettingsConfiguration(configuredSettings, finalPrintSettings);
                 }
-
-
-
-
-
-
-
-
-
-
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"SetPrinterAndPageSettings: Error in main flow: {ex.GetType().Name} - {ex.Message}\\n{ex.StackTrace}");
+                HandleSettingsConfigurationError();
             }
         }
 
