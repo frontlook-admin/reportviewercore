@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
 		<TargetFrameworks>net8.0-Windows</TargetFrameworks>
-		<FrontLook>8.25.*</FrontLook>
+		<FrontLook>8.26.*</FrontLook>
 	</PropertyGroup>
 
 	<PropertyGroup Label="Version" Condition="'$(DesignTimeBuild)' != 'true' OR '$(BuildingProject)' == 'true'">
@@ -71,8 +71,6 @@
 		</ProjectReference>
 		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreDbAccessLibrary\FrontLookCoreDbAccessLibrary.Desktop.Rdlc\FrontLookCoreDbAccessLibrary.Desktop.Rdlc.csproj" />
 	</ItemGroup>
-
-	<!--
 	<ItemGroup Condition="'$(Configuration)'!='Debug'">
 		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreLibraryAssembly\FrontLookCoreLibraryAssembly.csproj">
 
@@ -81,14 +79,25 @@
 		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreDbAccessLibrary\FrontLookCoreDbAccessLibrary.Desktop.Rdlc\FrontLookCoreDbAccessLibrary.Desktop.Rdlc.csproj" />
 	</ItemGroup>
 
--->
-	<ItemGroup>
+	<!--
+	<ItemGroup Condition="'$(Configuration)'!='Debug'">
+		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreLibraryAssembly\FrontLookCoreLibraryAssembly.csproj">
+
+			<ExcludeAssets>contentFiles</ExcludeAssets>
+		</ProjectReference>
+		<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreDbAccessLibrary\FrontLookCoreDbAccessLibrary.Desktop.Rdlc\FrontLookCoreDbAccessLibrary.Desktop.Rdlc.csproj" />
+		
+	</ItemGroup>
+
+	-->
+	<!--
+	<ItemGroup Condition="'$(Configuration)'!='Debug'">
 		<PackageReference Include="FrontLookCoreLibraryAssembly" Version="$(FrontLook)">
 			<ExcludeAssets>contentFiles</ExcludeAssets>
 		</PackageReference>
 		<PackageReference Include="FrontLookCoreDbAccessLibrary.Desktop.Rdlc" Version="$(FrontLook)" />
-		<!--kageReference Include="Microsoft.DependencyValidation.Analyzers" Version="0.11.0" />-->
 	</ItemGroup>
+	-->
 
 	<ItemGroup>
 		<None Update="AccLead.xsd">

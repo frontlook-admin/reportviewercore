@@ -8,3 +8,5 @@ obj
 
 # Allow RdlcReportCode.dll to be committed
 !ExternalAssemblies/CS/bin/Release/net8.0/RdlcReportCode.dll
+/ExternalAssemblies/CS/.vs
+*.pdf

@@ -34,46 +34,47 @@ using System.IO;
 using System.Linq;
 using System.Text;
 
-namespace RdlcReportCodeNamespace;
+// No namespace - RDLC requires direct class access for external assemblies
+// Matches VB embedded code pattern for consistency
 
 /// <summary>
 /// Custom code for RDLC reports with .NET 8 optimizations
 /// </summary>
-public static class RdlcReportCode
+public class Code
 {
     // =================
     // Global variables
     // =================
-    private static Dictionary<string, object>? globalDict;
-    
+    public static Dictionary<string, object>? globalDict;
+
     // NAV way - Legacy support for Data1, Data2, Data3
-    private static object? data1;
-    private static object? data2;
-    private static object? data3;
-    
+    public object? data1;
+    public object? data2;
+    public object? data3;
+
     // =================
     // Logging variables (OPTIMIZED)
     // =================
-    private static string? cachedLogPath;
-    private static string? cachedFilePath;
-    private static string? cachedFileName;
-    private static string? cachedDate;
-    private static bool logInitialized;
-    
+    public string? cachedLogPath;
+    public string? cachedFilePath;
+    public string? cachedFileName;
+    public string? cachedDate;
+    public bool logInitialized;
+
     // =================
     // Caching variables
     // =================
-    private static readonly Dictionary<long, string> numberWordsCache = [];
-    private static readonly object cacheLock = new();
-    
+    public static readonly Dictionary<long, string> numberWordsCache = [];
+    public static readonly object cacheLock = new();
+
     // ==========================
     // Cache Management
     // ==========================
-    
+
     /// <summary>
     /// Clear all caches (call if memory becomes a concern)
     /// </summary>
-    public static void ClearCaches()
+    public void ClearCaches()
     {
         lock (cacheLock)
         {
@@ -86,22 +87,22 @@ public static class RdlcReportCode
             cachedDate = null;
         }
     }
-    
+
     // ==========================
     // Logging Methods (OPTIMIZED)
     // ==========================
-    
+
     /// <summary>
     /// Internal helper to initialize log path with caching
     /// </summary>
-    private static void InitializeLogPath(string filePath, string fileName, out string fullPath)
+    public void InitializeLogPath(string filePath, string fileName, out string fullPath)
     {
         var currentDate = DateTime.Now.ToString("yyyyMMdd");
-        
+
         // Only initialize if not already done or parameters changed
-        if (!logInitialized || 
-            cachedFilePath != filePath || 
-            cachedFileName != fileName || 
+        if (!logInitialized ||
+            cachedFilePath != filePath ||
+            cachedFileName != fileName ||
             cachedDate != currentDate)
         {
             cachedFilePath = filePath;
@@ -110,14 +111,14 @@ public static class RdlcReportCode
             cachedLogPath = Path.Combine(filePath, $"{cachedFileName}_{cachedDate}.log");
             logInitialized = true;
         }
-        
+
         fullPath = cachedLogPath!;
     }
-    
+
     /// <summary>
     /// Optimized unified logging with smart caching
     /// </summary>
-    public static void WriteLog(string message, string filePath = @"C:\Temp", string fileName = "")
+    public void WriteLog(string message, string filePath = @"C:\Temp", string fileName = "")
     {
         try
         {
@@ -130,151 +131,151 @@ public static class RdlcReportCode
             // Ignore logging errors silently
         }
     }
-    
+
     /// <summary>
     /// Legacy alias for backward compatibility
     /// </summary>
-    public static void WriteLogCached(string message, string filePath = @"C:\Temp", string fileName = "")
+    public void WriteLogCached(string message, string filePath = @"C:\Temp", string fileName = "")
     {
         WriteLog(message, filePath, fileName);
     }
-    
+
     // ==========================
     // Get value by name or number (OPTIMIZED)
     // ==========================
-    
+
     /// <summary>
     /// Get value from global dictionary
     /// </summary>
-    public static object GetVal(object key)
+    public object GetVal(object key)
     {
         return GetVal2(globalDict, key);
     }
-    
+
     /// <summary>
     /// Get value from specified dictionary by key or index
     /// </summary>
-    public static object GetVal2(object? data, object? key)
+    public object GetVal2(object? data, object? key)
     {
         if (data is null)
             return "CollectionEmpty";
-            
+
         if (key is null)
             return "KeyEmpty";
-        
+
         if (data is not Dictionary<string, object> dictionary)
             return "InvalidCollection";
-        
+
         // Handle numeric key (1-based index) - convert to sequential access
         if (double.TryParse(key.ToString(), out var numericKey))
         {
             var index = (int)numericKey;
             if (index == 0)
                 return "Index starts at 1";
-            
+
             if (dictionary.Count == 0)
                 return "CollectionEmpty";
-            
+
             if (index < 1 || index > dictionary.Count)
                 return $"Invalid Index: '{index}'! Collection Count = {dictionary.Count}";
-            
+
             return dictionary.Values.ElementAt(index - 1);
         }
-        
+
         // Handle string key
         var strKey = key.ToString()!.ToUpperInvariant();
-        
+
         return dictionary.TryGetValue(strKey, out var value) ? value : $"?{strKey}?";
     }
-    
+
     // ===========================================
     // Set global values from the body (OPTIMIZED)
     // ===========================================
-    
+
     /// <summary>
     /// Set global data from key-value list
     /// </summary>
-    public static bool SetGlobalData(object keyValueList)
+    public bool SetGlobalData(object keyValueList)
     {
         SetDataAsKeyValueList(ref globalDict, keyValueList);
         return true; // Set Control to Hidden=true
     }
-    
+
     /// <summary>
     /// Optimized key-value list parsing with Span and modern patterns
     /// </summary>
-    public static bool SetDataAsKeyValueList(ref Dictionary<string, object>? sharedData, object? newData)
+    public bool SetDataAsKeyValueList(ref Dictionary<string, object>? sharedData, object? newData)
     {
         var dataStr = newData?.ToString();
         if (string.IsNullOrWhiteSpace(dataStr))
             return true;
-        
+
         var words = dataStr.Split((char)177); // Chr(177)
-        
+
         // Process pairs efficiently with step 2
         for (var i = 0; i < words.Length - 1; i += 2)
         {
             AddKeyValue(ref sharedData, words[i], words[i + 1]);
         }
-        
+
         // Handle last odd element (key without value)
         if (words.Length % 2 == 1)
         {
             AddKeyValue(ref sharedData, words[^1], "");
         }
-        
+
         return true;
     }
-    
+
     /// <summary>
     /// Optimized AddKeyValue with Dictionary and modern patterns
     /// </summary>
-    public static int AddKeyValue(ref Dictionary<string, object>? data, object? key, object? value)
+    public int AddKeyValue(ref Dictionary<string, object>? data, object? key, object? value)
     {
         // Initialize dictionary if needed
         data ??= [];
-        
+
         // Determine key (use auto-increment if empty)
         var keyStr = key?.ToString() ?? string.Empty;
-        var realKey = string.IsNullOrWhiteSpace(keyStr) 
-            ? (data.Count + 1).ToString() 
+        var realKey = string.IsNullOrWhiteSpace(keyStr)
+            ? (data.Count + 1).ToString()
             : keyStr.ToUpperInvariant();
-        
+
         // Add or update the value
         data[realKey] = value ?? string.Empty;
-        
+
         return data.Count;
     }
-    
+
     // ==========================
     // NAV Way - Legacy SetData & GetData
     // ==========================
-    
+
     /// <summary>
     /// SetData - saves a list of values in Data1, Data2, or Data3
     /// </summary>
-    public static bool SetData(object? newData, int group)
+    public bool SetData(object? newData, int group)
     {
         if (newData is null || string.IsNullOrWhiteSpace(newData.ToString()))
             return true;
-        
+
         switch (group)
         {
             case 1: data1 = newData; break;
             case 2: data2 = newData; break;
             case 3: data3 = newData; break;
         }
-        
+
         return true;
     }
-    
+
     /// <summary>
     /// GetData - returns a value from one of the 3 lists at position number
     /// </summary>
-    public static object? GetData(int num, int group)
+    public object? GetData(int num, int group)
     {
         if (num < 1) return null;
-        
+
         var parts = group switch
         {
             1 => data1?.ToString()?.Split((char)177),
@@ -282,111 +283,111 @@ public static class RdlcReportCode
             3 => data3?.ToString()?.Split((char)177),
             _ => null
         };
-        
+
         return parts is not null && num <= parts.Length ? parts[num - 1] : null;
     }
-    
+
     // ==========================
     // String Concatenation Methods (OPTIMIZED with StringBuilder)
     // ==========================
-    
+
     /// <summary>
     /// Concatenate non-empty strings with CRLF
     /// </summary>
-    public static string ConcatenateNonEmptyWithCrLf(params string[] strings)
+    public string ConcatenateNonEmptyWithCrLf(params string[] strings)
     {
         ArgumentNullException.ThrowIfNull(strings);
-        
+
         var nonEmpty = strings.Where(s => !string.IsNullOrWhiteSpace(s));
         return string.Join(Environment.NewLine, nonEmpty).Trim();
     }
-    
+
     /// <summary>
     /// Concatenate non-empty strings with custom delimiter
     /// </summary>
-    public static string ConcatenateNonEmptyWithDelimiter(string[] strings, string delimiter)
+    public string ConcatenateNonEmptyWithDelimiter(string[] strings, string delimiter)
     {
         ArgumentNullException.ThrowIfNull(strings);
-        
+
         var nonEmpty = strings.Where(s => !string.IsNullOrWhiteSpace(s));
         return string.Join(delimiter, nonEmpty).Trim();
     }
-    
+
     /// <summary>
     /// Legacy alias - now uses the optimized delimiter function
     /// </summary>
-    public static string ConcatenateNonEmptyWithCrLfAndDelimiter(string[] strings, string delimiter)
+    public string ConcatenateNonEmptyWithCrLfAndDelimiter(string[] strings, string delimiter)
     {
         return ConcatenateNonEmptyWithDelimiter(strings, delimiter);
     }
-    
+
     /// <summary>
     /// Concatenate all strings with CRLF
     /// </summary>
-    public static string ConcatenateWithCrLf(params string[] strings)
+    public string ConcatenateWithCrLf(params string[] strings)
     {
         return string.Join("\r\n", strings);
     }
-    
+
     // ==========================
     // Number to Words Conversion (OPTIMIZED with Caching + 4-element Currency Support)
     // ==========================
-    
+
     /// <summary>
     /// Currency array: [Name, Decimal Name, Symbol, Format]
     /// </summary>
-    public static readonly string[] CurrencyDenotionIndian = 
+    public static readonly string[] CurrencyDenotionIndian =
     [
         "Rupees",
         "Paise",
         "₹",
         "#,##,##0.00"
     ];
-    
+
     /// <summary>
     /// Format currency with symbol and proper formatting
     /// </summary>
-    public static string FormatCurrency(double number, string[]? currencyDenotion = null)
+    public string FormatCurrency(double number, string[]? currencyDenotion = null)
     {
-        var currency = currencyDenotion is { Length: >= 4 } 
-            ? currencyDenotion 
+        var currency = currencyDenotion is { Length: >= 4 }
+            ? currencyDenotion
             : CurrencyDenotionIndian;
-        
+
         var (_, _, symbol, format) = (currency[0], currency[1], currency[2], currency[3]);
-        
+
         // Apply format
         var formatted = format == "#,##,##0.00"
             ? FormatIndianNumbering(number)
             : number.ToString("N2", CultureInfo.InvariantCulture);
-        
+
         return symbol + formatted;
     }
-    
+
     /// <summary>
     /// Format number with Indian numbering system using Span for performance
     /// </summary>
-    private static string FormatIndianNumbering(double number)
+    public string FormatIndianNumbering(double number)
     {
         Span<char> buffer = stackalloc char[64];
         number.TryFormat(buffer, out var charsWritten, "0.00", CultureInfo.InvariantCulture);
-        
+
         var numStr = buffer[..charsWritten];
         var dotIndex = numStr.IndexOf('.');
         var intPart = numStr[..dotIndex];
         var decPart = numStr[(dotIndex + 1)..];
-        
+
         // Handle negative numbers
         var isNegative = intPart[0] == '-';
         var absIntPart = isNegative ? intPart[1..] : intPart;
-        
+
         if (absIntPart.Length <= 3)
         {
             return $"{(isNegative ? "-" : "")}{absIntPart.ToString()}.{decPart.ToString()}";
         }
-        
+
         var sb = new StringBuilder();
         var remaining = absIntPart.Length - 3;
-        
+
         // Process groups of 2 from left
         var start = 0;
         if (remaining % 2 == 1)
@@ -395,124 +396,124 @@ public static class RdlcReportCode
             sb.Append(',');
             start = 1;
         }
-        
+
         for (var i = start; i < remaining; i += 2)
         {
             if (i > start) sb.Append(',');
             sb.Append(absIntPart.Slice(i, 2));
         }
-        
+
         // Add last 3 digits
         if (sb.Length > 0) sb.Append(',');
         sb.Append(absIntPart[^3..]);
-        
+
         return $"{(isNegative ? "-" : "")}{sb}.{decPart.ToString()}";
     }
-    
+
     /// <summary>
     /// Convert number to words with currency support
     /// </summary>
-    public static string ToWordsIn(double number, bool ifCurrency = true, bool showCurrency = true, string currencyDenotion = "")
+    public string ToWordsIn(double number, bool ifCurrency = true, bool showCurrency = true, string currencyDenotion = "")
     {
         var num = number.ToString(System.Globalization.CultureInfo.InvariantCulture).Split('.');
         var words1 = ToWordsIn(long.Parse(num[0]));
-        
+
         var word2 = string.Empty;
         if (num.Length > 1 && long.Parse(num[1]) > 0)
         {
             word2 = ToWordsInAfterPoint(num[1], ifCurrency);
         }
-        
+
         if (ifCurrency)
         {
             if (showCurrency)
             {
                 // Add currency names
             }
-            
+
             return (num.Length > 1 && long.Parse(num[1]) > 0)
                 ? $"{words1} and {word2} Only"
                 : $"{words1} Only";
         }
-        
+
         return (num.Length > 1 && long.Parse(num[1]) > 0)
             ? $"{words1} Point {word2}"
             : words1;
     }
-    
+
     /// <summary>
     /// Optimized with caching for common values
     /// </summary>
-    public static string ToWordsIn(long number)
+    public string ToWordsIn(long number)
     {
         lock (cacheLock)
         {
             // Check cache first
             if (numberWordsCache.ContainsKey(number))
                 return numberWordsCache[number];
-            
+
             // Calculate the result
             var result = ToWordsInInternal(number);
-            
+
             // Cache if reasonable size (< 10000 to prevent excessive memory usage)
             if (number < 10000)
             {
                 numberWordsCache[number] = result;
             }
-            
+
             return result;
         }
     }
-    
+
     /// <summary>
     /// Internal implementation of number-to-words conversion
     /// </summary>
-    private static string ToWordsInInternal(long number)
+    public string ToWordsInInternal(long number)
     {
         if (number == 0) return "zero";
         if (number < 0) return "minus " + ToWordsInInternal(Math.Abs(number));
-        
+
         var words = "";
-        
+
         if ((number / 10000000) > 0)
         {
             words += ToWordsInInternal(number / 10000000) + " Crore ";
             number %= 10000000;
         }
-        
+
         if ((number / 100000) > 0)
         {
             words += ToWordsInInternal(number / 100000) + " Lakh ";
             number %= 100000;
         }
-        
+
         if ((number / 1000) > 0)
         {
             words += ToWordsInInternal(number / 1000) + " Thousand ";
             number %= 1000;
         }
-        
+
         if ((number / 100) > 0)
         {
             words += ToWordsInInternal(number / 100) + " Hundred ";
             number %= 100;
         }
-        
+
         if (number <= 0) return words;
         if (words != "") words += "and ";
-        
-        ReadOnlySpan<string> unitsMap = 
+
+        ReadOnlySpan<string> unitsMap =
         [
             "Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
             "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
             "Seventeen", "Eighteen", "Nineteen"
         ];
-        
-        ReadOnlySpan<string> tensMap = 
+
+        ReadOnlySpan<string> tensMap =
         [
             "Zero", "Ten", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"
         ];
-        
+
         if (number < 20)
         {
             words += unitsMap[(int)number];
@@ -523,19 +524,19 @@ public static class RdlcReportCode
             if ((number % 10) > 0)
                 words += "-" + unitsMap[(int)(number % 10)];
         }
-        
+
         return words;
     }
-    
+
     /// <summary>
     /// Convert decimal part to words
     /// </summary>
-    public static string ToWordsInAfterPoint(string number, bool ifCurrency)
+    public string ToWordsInAfterPoint(string number, bool ifCurrency)
     {
         var word = string.Empty;
         if (long.Parse(number) <= 0)
             return word;
-        
+
         if (ifCurrency)
         {
             if (number.Length == 1)
@@ -550,19 +551,19 @@ public static class RdlcReportCode
                 word += ToWordsIn(long.Parse(pt[i].ToString()));
             }
         }
-        
+
         return word;
     }
-    
+
     /// <summary>
     /// Minimised number to words (e.g., "2.5 Lakh" instead of full words)
     /// </summary>
-    public static string FL_NumberToWordsMinimised(long number)
+    public string FL_NumberToWordsMinimised(long number)
     {
         var words = "";
         var unit = "";
         var divider = 100;
-        
+
         if (number > 99 && number < 999)
         {
             divider = 100;
@@ -583,7 +584,7 @@ public static class RdlcReportCode
             divider = 10000000;
             unit = "Crore";
         }
-        
+
         var no = Convert.ToDecimal(number) / divider;
         if (Math.Floor(no) != no)
         {
@@ -593,22 +594,22 @@ public static class RdlcReportCode
         {
             words = no + " " + unit;
         }
-        
+
         return words;
     }
-    
+
     // ==========================
     // Base64 Conversion Methods
     // ==========================
-    
+
     /// <summary>
     /// Convert Base64 string to byte array with modern string handling
     /// </summary>
-    public static byte[]? ConvertBase64ToBytes(string? base64String)
+    public byte[]? ConvertBase64ToBytes(string? base64String)
     {
         if (string.IsNullOrWhiteSpace(base64String))
             return null;
-        
+
         try
         {
             // Remove potential data URI prefix if present
@@ -617,7 +618,7 @@ public static class RdlcReportCode
             {
                 base64String = base64String[(commaIndex + 1)..];
             }
-            
+
             // Remove any whitespace characters using Span for efficiency
             Span<char> buffer = stackalloc char[base64String.Length];
             var index = 0;
@@ -626,7 +627,7 @@ public static class RdlcReportCode
                 if (!char.IsWhiteSpace(c))
                     buffer[index++] = c;
             }
-            
+
             return Convert.FromBase64String(buffer[..index].ToString());
         }
         catch (Exception ex)
