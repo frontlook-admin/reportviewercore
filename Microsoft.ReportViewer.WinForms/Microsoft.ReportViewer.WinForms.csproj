@@ -3,7 +3,7 @@
 		<AssemblyName>Microsoft.ReportViewer.WinForms</AssemblyName>
 		<UseWindowsForms>True</UseWindowsForms>
 		<TargetFrameworks>net8.0-Windows</TargetFrameworks>
-		<FrontLook>8.25.*</FrontLook>
+		<FrontLook>8.26.*</FrontLook>
 	</PropertyGroup>
 	<PropertyGroup>
 		<LangVersion>8.0</LangVersion>

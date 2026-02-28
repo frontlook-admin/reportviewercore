@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
 		<TargetFrameworks>net8.0-Windows</TargetFrameworks>
-		<FrontLook>8.25.*</FrontLook>
+		<FrontLook>8.26.*</FrontLook>
 	</PropertyGroup>
 
 	<ItemGroup>
