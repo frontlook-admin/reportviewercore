@@ -162,31 +162,33 @@ namespace Microsoft.Reporting.WinForms
             }
         }
 
-        public override System.Drawing.Image BackgroundImage
-        {
-            get
-            {
-                return base.BackgroundImage;
-            }
-            set
-            {
-                base.BackgroundImage = value;
-                winRSviewer.BackgroundImage = value;
-            }
-        }
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+		public override System.Drawing.Image BackgroundImage
+		{
+			get
+			{
+				return base.BackgroundImage;
+			}
+			set
+			{
+				base.BackgroundImage = value;
+				winRSviewer.BackgroundImage = value;
+			}
+		}
 
-        public override ImageLayout BackgroundImageLayout
-        {
-            get
-            {
-                return base.BackgroundImageLayout;
-            }
-            set
-            {
-                base.BackgroundImageLayout = value;
-                winRSviewer.BackgroundImageLayout = value;
-            }
-        }
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+		public override ImageLayout BackgroundImageLayout
+		{
+			get
+			{
+				return base.BackgroundImageLayout;
+			}
+			set
+			{
+				base.BackgroundImageLayout = value;
+				winRSviewer.BackgroundImageLayout = value;
+			}
+		}
 
         [Category("Appearance")]
         [DefaultValue(100)]

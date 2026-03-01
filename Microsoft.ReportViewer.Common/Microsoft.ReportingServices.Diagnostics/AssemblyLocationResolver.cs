@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 
 namespace Microsoft.ReportingServices.Diagnostics
@@ -9,7 +11,7 @@ namespace Microsoft.ReportingServices.Diagnostics
 
 		public static AssemblyLocationResolver CreateResolver(AppDomain tempAppDomain)
 		{
-#if NETSTANDARD2_1
+#if NETSTANDARD2_0_OR_GREATER
 			return new AssemblyLocationResolver(fullLoad: true);
 #else
 			if (tempAppDomain == null)
@@ -21,9 +23,30 @@ namespace Microsoft.ReportingServices.Diagnostics
 #endif
 		}
 
-		public string LoadAssemblyAndResolveLocation(string name)
+		public string[] LoadAssemblyAndResolveLocation(string name)
 		{
-			return Assembly.Load(name).Location;
+			var locations = new List<string>();
+			LoadAssemblyAndResolveLocation(new AssemblyName(name), locations);
+			return locations.ToArray();
+		}
+
+		private void LoadAssemblyAndResolveLocation(AssemblyName name, List<string> locations)
+		{
+			Assembly assembly;
+			try
+			{
+				assembly = Assembly.Load(name);
+			}
+			catch (FileNotFoundException)
+			{
+				return;
+			}
+			if (locations.Contains(assembly.Location)) return;
+			locations.Add(assembly.Location);
+			foreach (var referencedAssembly in assembly.GetReferencedAssemblies())
+			{
+				LoadAssemblyAndResolveLocation(referencedAssembly, locations);
+			}
 		}
 
 		public AssemblyLocationResolver()

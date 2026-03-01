@@ -51,47 +51,50 @@ namespace Microsoft.Reporting.WinForms
         private ToolStripButton printerPageSettings;
         private ToolStripDropDownButton export;
 
-        public override Size MinimumSize
-        {
-            get
-            {
-                return GetIdealSize();
-            }
-            set
-            {
-            }
-        }
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+		public override Size MinimumSize
+		{
+			get
+			{
+				return GetIdealSize();
+			}
+			set
+			{
+			}
+		}
 
-        public override Size MaximumSize
-        {
-            get
-            {
-                return GetIdealSize();
-            }
-            set
-            {
-            }
-        }
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+		public override Size MaximumSize
+		{
+			get
+			{
+				return GetIdealSize();
+			}
+			set
+			{
+			}
+		}
 
-        internal ReportViewer ViewerControl
-        {
-            get
-            {
-                return m_currentViewerControl;
-            }
-            set
-            {
-                if (m_currentViewerControl != null)
-                {
-                    m_currentViewerControl.StatusChanged -= OnReportViewerStateChanged;
-                }
-                m_currentViewerControl = value;
-                if (m_currentViewerControl != null)
-                {
-                    m_currentViewerControl.StatusChanged += OnReportViewerStateChanged;
-                }
-            }
-        }
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+		internal ReportViewer ViewerControl
+		{
+			get
+			{
+				return m_currentViewerControl;
+			}
+			set
+			{
+				if (m_currentViewerControl != null)
+				{
+					m_currentViewerControl.StatusChanged -= OnReportViewerStateChanged;
+				}
+				m_currentViewerControl = value;
+				if (m_currentViewerControl != null)
+				{
+					m_currentViewerControl.StatusChanged += OnReportViewerStateChanged;
+				}
+			}
+		}
 
         public event ZoomChangedEventHandler ZoomChange;
 

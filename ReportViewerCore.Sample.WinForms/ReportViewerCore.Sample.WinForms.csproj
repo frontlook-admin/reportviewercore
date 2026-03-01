@@ -2,8 +2,9 @@
 
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
-		<TargetFrameworks>net8.0-Windows</TargetFrameworks>
+		<TargetFramework>net10.0-windows</TargetFramework>
 		<FrontLook>8.26.*</FrontLook>
+		<UseWindowsForms>true</UseWindowsForms>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -20,31 +21,6 @@
 		<!--<ProjectReference Include="..\..\FrontLookCore\FrontLookCoreDbAccessLibrary\FrontLookCoreDbAccessLibrary.Desktop.Rdlc\FrontLookCoreDbAccessLibrary.Desktop.Rdlc.csproj" />-->
 		<ProjectReference Include="..\Microsoft.ReportViewer.WinForms\Microsoft.ReportViewer.WinForms.csproj" />
 	</ItemGroup>
-
-	<ItemGroup>
-		<Compile Update="FL_RldcReportViewerForm.cs">
-			<SubType>Form</SubType>
-		</Compile>
-	</ItemGroup>
-
-	<ItemGroup>
-		<None Update="SaleBill_Thermal.json">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-		<None Update="SaleBill_Thermal.rdlc">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-		<None Update="SaleBill_Thermal1.json">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-		<None Update="TrialBalanceReport.rdlc">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-		<None Update="Trial_Balance_Report.json">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-	</ItemGroup>
-
 
 	<!--
 

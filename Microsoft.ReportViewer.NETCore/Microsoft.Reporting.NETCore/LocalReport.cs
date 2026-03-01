@@ -142,7 +142,7 @@ namespace Microsoft.Reporting.NETCore
 				{
 					if (string.Compare(value, ReportEmbeddedResource, StringComparison.Ordinal) != 0)
 					{
-						SetEmbeddedResourceAsReportDefinition(value, Assembly.GetCallingAssembly());
+						SetEmbeddedResourceAsReportDefinition(value, System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported ? Assembly.GetCallingAssembly() : Assembly.GetExecutingAssembly());
 					}
 				}
 			}
