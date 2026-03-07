@@ -2,7 +2,7 @@
   <PropertyGroup>
     <AssemblyName>Microsoft.ReportViewer.Common</AssemblyName>
     <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
-    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
   </PropertyGroup>
   <PropertyGroup>
     <LangVersion>10.0</LangVersion>

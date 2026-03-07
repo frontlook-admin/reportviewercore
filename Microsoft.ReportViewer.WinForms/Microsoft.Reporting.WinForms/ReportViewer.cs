@@ -162,33 +162,33 @@ namespace Microsoft.Reporting.WinForms
             }
         }
 
-		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-		public override System.Drawing.Image BackgroundImage
-		{
-			get
-			{
-				return base.BackgroundImage;
-			}
-			set
-			{
-				base.BackgroundImage = value;
-				winRSviewer.BackgroundImage = value;
-			}
-		}
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public override System.Drawing.Image BackgroundImage
+        {
+            get
+            {
+                return base.BackgroundImage;
+            }
+            set
+            {
+                base.BackgroundImage = value;
+                winRSviewer.BackgroundImage = value;
+            }
+        }
 
-		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-		public override ImageLayout BackgroundImageLayout
-		{
-			get
-			{
-				return base.BackgroundImageLayout;
-			}
-			set
-			{
-				base.BackgroundImageLayout = value;
-				winRSviewer.BackgroundImageLayout = value;
-			}
-		}
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public override ImageLayout BackgroundImageLayout
+        {
+            get
+            {
+                return base.BackgroundImageLayout;
+            }
+            set
+            {
+                base.BackgroundImageLayout = value;
+                winRSviewer.BackgroundImageLayout = value;
+            }
+        }
 
         [Category("Appearance")]
         [DefaultValue(100)]
@@ -682,6 +682,8 @@ namespace Microsoft.Reporting.WinForms
 
         internal ProcessingThread BackgroundThread => m_processingThread;
 
+        [Browsable(true)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public PageSettings CurrentReportPageSetting
         {
             get => CurrentReport.PageSettings;
@@ -691,7 +693,9 @@ namespace Microsoft.Reporting.WinForms
             }
         }
 
-        public bool MetricEnabled { get; set; }
+        [Browsable(true)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public bool MetricEnabled { get; set; } = true;
 
         internal ReportInfo CurrentReport
         {
@@ -1887,7 +1891,11 @@ namespace Microsoft.Reporting.WinForms
             return PrintDialog(CreateDefaultPrintSettings());
         }
 
+        [Browsable(true)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public string PrintSettingFilePath { get; set; }
+        [Browsable(true)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public CustomPrintDialog CustomPrintDialog { get; set; }
 
         // save print settings for next time
@@ -1926,7 +1934,7 @@ namespace Microsoft.Reporting.WinForms
                     Debug.WriteLine($"LoadPrinterSettingsFromFile: Failed to load from file: {ex.GetType().Name} - {ex.Message}");
                 }
             }
-            
+
             // Fallback to default settings
             var pageSetting = GetPageSettings();
             return new CustomPrintDialog(PrinterSettings, pageSetting);
@@ -1941,7 +1949,7 @@ namespace Microsoft.Reporting.WinForms
                 throw new ArgumentNullException(nameof(printDialog));
             if (pageSettings == null)
                 throw new ArgumentNullException(nameof(pageSettings));
-                
+
             var defaultSettings = printDialog.PrinterSettings.DefaultPageSettings;
             defaultSettings.PaperSize = pageSettings.PaperSize;
             defaultSettings.Landscape = pageSettings.Landscape;
@@ -1958,7 +1966,7 @@ namespace Microsoft.Reporting.WinForms
         {
             if (printDialog == null)
                 throw new ArgumentNullException(nameof(printDialog));
-                
+
             if (!string.IsNullOrEmpty(PrintSettingFilePath))
             {
                 try
@@ -1980,7 +1988,7 @@ namespace Microsoft.Reporting.WinForms
         private void HandleSuccessfulSettingsConfiguration(PrinterSettings printerSettings, CustomPrintDialog printDialog)
         {
             PrinterSettings = printerSettings;
-            
+
             try
             {
                 SavePrintSettingsToFile(printDialog);
@@ -1990,7 +1998,7 @@ namespace Microsoft.Reporting.WinForms
                 Debug.WriteLine($"HandleSuccessfulSettingsConfiguration: Could not save settings: {ex.Message}");
                 // Continue even if save fails
             }
-            
+
             RefreshReport();
         }
 
@@ -2000,7 +2008,7 @@ namespace Microsoft.Reporting.WinForms
         private void HandleSettingsConfigurationError()
         {
             CustomPrintDialog loadedDialog = LoadPrinterSettingsFromFile();
-            
+
             using (var pd = loadedDialog?.GetPrintDialog())
             {
                 if (pd != null && loadedDialog != null)
@@ -2010,12 +2018,12 @@ namespace Microsoft.Reporting.WinForms
                     {
                         ApplyPageSettingsToPrintDialog(pd, setUpPgSetting);
                     }
-                    
+
                     if (pd.ShowDialog() == DialogResult.OK)
                     {
                         PrinterSettings = pd.PrinterSettings;
                         PageSetupDialog();
-                        
+
                         CustomPrintDialog = new CustomPrintDialog(pd, CurrentReportPageSetting);
                         SavePrintSetting();
                         RefreshReport();
@@ -2040,20 +2048,20 @@ namespace Microsoft.Reporting.WinForms
             {
                 var pageSetting = GetPageSettings();
                 var printSettings = new CustomPrintDialog(PrinterSettings, pageSetting);
-                
+
                 PrinterSettings configuredSettings;
-                
+
                 using (var pd = printSettings?.GetPrintDialog())
                 {
                     if (pd == null)
                     {
                         throw new InvalidOperationException("Failed to create print dialog");
                     }
-                    
+
                     ApplyPageSettingsToPrintDialog(pd, pageSetting);
                     configuredSettings = GetPrintDialog(pd);
                 }
-                
+
                 var updatedDialog = new PrintDialog { PrinterSettings = configuredSettings };
                 var dialogResult = PageSetupDialog();
 
