@@ -3,6 +3,7 @@ using FrontLookCoreDbAccessLibrary.Desktop.Rdlc.FL_RDLC;
 using Microsoft.Reporting.WinForms;
 using NPOI.OpenXmlFormats.Vml;
 using System;
+using System.ComponentModel;
 using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
@@ -16,6 +17,7 @@ namespace ReportViewerCore
     public class FL_RldcReportViewerForm : Form
     {
         private readonly ReportViewer reportViewer;
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public FL_IRdlcReport reportCompiler { get; set; } = new FL_IRdlcReport();
 
         public FL_RldcReportViewerForm(FL_IRdlcReport _reportCompiler)
