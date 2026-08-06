@@ -1,5 +1,3 @@
-
-using CliReportCompiler.ReportForm;
 using FrontLookCoreDbAccessLibrary.Desktop.Rdlc.FL_RDLC;
 using FrontLookCoreLibraryAssembly.FL_General;
 using FrontLookCoreLibraryAssembly.FL_GlobalClasses;
@@ -11,81 +9,104 @@ using System.Data;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace CliReportCompiler
 {
     /// <summary>
-    /// Utility class for RDLC report compilation and processing
+    /// Parses CLI options and processes RDLC reports.
     /// </summary>
     public static class ReportCompilerUtility
     {
-        // Create bidirectional lookup for parameter names for faster access
-        private static readonly Dictionary<string, string> ParameterNames = new()
-        {
-            { "ReportPath", "rp" },
-            { "ReportDataSource", "ds" },
-            { "ReportName", "rn" },
-            { "Mode", "m" },
-            { "ExportFormat", "ef" },
-            { "ExportPath", "ep" },
-            { "PrintSetupFile", "psf" },
-            { "Test", "t" }
-        };
+        private const string ParametersTableName = "RldcParameters";
+        private const string AttachSubReportOption = "AttachSubReport";
+        private const string PreviewMode = "PREVIEW";
+        private const string PrintMode = "PRINT";
+        private const string PrintSetupMode = "PRINTSETUP";
+        private const string PrintSettingsMode = "PRINTSETTINGS";
+        private const string ExportMode = "EXPORT";
+        private const string WaitForViewerOption = "WaitForViewer";
+        private const string EnableErrorLoggingOption = "EnableErrorLogging";
 
-        // Create reverse lookup for faster parameter normalization
-        private static readonly Dictionary<string, string> ParameterShortToLong = new(StringComparer.OrdinalIgnoreCase);
-
-        // Use regular Dictionary since thread-safety isn't required
-        private static readonly Dictionary<string, string> GetParameters = new(StringComparer.OrdinalIgnoreCase);
-        private static readonly HashSet<string> RequiredParameters = new(StringComparer.OrdinalIgnoreCase)
-        {
-            "ReportPath", "ReportDataSource", "ReportName", "Mode", "PrintSetupFile"
-        };
-
-        // Static constructor to initialize the reverse lookup
-        static ReportCompilerUtility()
-        {
-            foreach (var pair in ParameterNames)
-            {
-                ParameterShortToLong[pair.Value] = pair.Key;
-            }
-        }
-
-        /// <summary>
-        /// Shows usage information for the report compiler
-        /// </summary>
-        public static void ShowUsage()
-        {
-            @"Usage: CliReportCompiler.exe options
+        private const string UsageText = @"Usage: CliReportCompiler.exe options
 Options:
   --ReportPath|-rp          Path to the RDLC report file.
   --ReportDataSource|-ds    Path to the data source file (should be in xml along with xml schema in single file).
   --ReportName|-rn          Name of the report.
-  --Mode|-m                 Operation mode: Preview, Print, PrintSetup, or Export.
+  --Mode|-m                 Operation mode: Preview, Print, PrintSetup, PrintSettings, or Export.
   --ExportFormat|-ef        Export format: PDF, EXCEL, EXCELOPENXML, WORD, WORDOPENXML, IMAGE, HTML4_0, HTML5, MHTML
   --ExportPath|-ep          Path where the exported file will be saved.
-  --PrintSetupFile|-psf     Path to the print setup file(JsonFile).
+  --AttachSubReport|-asr    Attach sub reports using 'key1=value1,key2=value2'.
+  --PrintSetupFile|-psf     Path to the print setup file (JSON).
+  --WaitForViewer|-wfv      Wait for the viewer to close: true or false. Default: true.
+  --EnableErrorLogging|-el  Include detailed exception information in CLI error logs: true or false.
   --Test|-t                 Test message (for debugging purposes).
   --Demo|-d                 Run a demo of the ReportViewer.
   --Help|-h                 Display this help message.
 
-    Parameters              Pass the parameters in the data source file with table name RldcParameters.
+Parameters are loaded from the data source file using the table name RldcParameters.
 
 Example:
-  CliReportCompiler.exe --reportPath ""C:\path\to\report.rdlc"" --reportDataSource ""C:\path\to\data.xml"" --PrintSetupFile ""C:\path\to\printsetup.json""  --Parameters ""json Parameters"" --ReportName ""ReportName"" --Mode ""Preview"" --ExportFormat ""PDF"" --ExportPath ""C:\path\to\exported\file"" --test ""Msg""
-  CliReportCompiler --help".FL_ConsoleWriteDebug();
+  CliReportCompiler.exe --ReportPath ""C:\path\to\report.rdlc"" --ReportDataSource ""C:\path\to\data.xml"" --PrintSetupFile ""C:\path\to\printsetup.json"" --ReportName ""ReportName"" --Mode ""Preview"" --ExportFormat ""PDF"" --ExportPath ""C:\path\to\exported\file"" --Test ""Msg""
+  CliReportCompiler.exe --ReportPath ""C:\path\to\report.rdlc"" --ReportDataSource ""C:\path\to\data.xml"" --PrintSetupFile ""C:\path\to\printsetup.json"" --ReportName ""ReportName"" --Mode ""Preview"" --WaitForViewer false --EnableErrorLogging true
+  CliReportCompiler.exe --Help";
+
+        private static readonly IReadOnlyDictionary<string, string> ParameterNames =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ReportPath"] = "rp",
+                ["ReportDataSource"] = "ds",
+                ["ReportName"] = "rn",
+                ["Mode"] = "m",
+                [AttachSubReportOption] = "asr",
+                ["ExportFormat"] = "ef",
+                ["ExportPath"] = "ep",
+                ["PrintSetupFile"] = "psf",
+                [WaitForViewerOption] = "wfv",
+                [EnableErrorLoggingOption] = "el",
+                ["Test"] = "t"
+            };
+
+        private static readonly IReadOnlyDictionary<string, string> ParameterShortToLong =
+            ParameterNames.ToDictionary(x => x.Value, x => x.Key, StringComparer.OrdinalIgnoreCase);
+
+        private static readonly string[] RequiredParameters =
+        {
+            "ReportPath",
+            "ReportDataSource",
+            "ReportName",
+            "Mode",
+            "PrintSetupFile"
+        };
+
+        private static readonly Dictionary<string, string> GetParameters =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        private static readonly Dictionary<string, string> GetSubReports =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        private static readonly object ConsoleSync = new();
+
+        /// <summary>
+        /// Shows usage information for the report compiler.
+        /// </summary>
+        public static void ShowUsage()
+        {
+            lock (ConsoleSync)
+            {
+                Console.WriteLine(UsageText);
+            }
         }
 
         /// <summary>
-        /// Runs a demo of the ReportViewer
+        /// Runs the bundled demo report.
         /// </summary>
         public static void RunDemo()
         {
-            Console.WriteLine("Running demo...");
-
-            string demoDataPath = Path.Combine(Environment.CurrentDirectory, "DemoDataset.xml");
-            string demoReportPath = Path.Combine(Environment.CurrentDirectory, "DemoReport.rdlc");
+            var demoDataPath = Path.Combine(Environment.CurrentDirectory, "DemoDataset.xml");
+            var demoReportPath = Path.Combine(Environment.CurrentDirectory, "DemoReport.rdlc");
 
             if (!File.Exists(demoDataPath) || !File.Exists(demoReportPath))
             {
@@ -93,119 +114,108 @@ Example:
                 return;
             }
 
-            string xmlContent = File.ReadAllText(demoDataPath);
-            var report = new FL_IRdlcReport()
+            using var report = new FL_IRdlcReport
             {
-                DataTables = xmlContent.FL_CastXmlToDataSet(),
+                DataTables = LoadDataset(demoDataPath),
                 ReportFile = demoReportPath,
-                ReportName = "DemoReport.rdlc",
+                ReportName = "DemoReport.rdlc"
             };
-
-            using var form = new ReportViewerForm(report);
+            using var form = new ReportForm.FL_RdlcReportViewerForm(report);
             form.ShowDialog();
         }
 
         /// <summary>
-        /// Parses command line arguments
+        /// Parses command line arguments.
         /// </summary>
-        /// <param name="args">Command line arguments</param>
-        /// <returns>True if processing should continue, false if a special command was handled</returns>
+        /// <param name="args">Command line arguments.</param>
+        /// <returns><see langword="true"/> when report execution should continue.</returns>
         public static bool ParseArguments(string[] args)
         {
-            if (args == null || args.Length == 0) return false;
-
-            // Check for special commands with case-insensitive comparison
-            for (int i = 0; i < args.Length; i++)
+            if (args == null || args.Length == 0)
             {
-                string arg = args[i];
-                if (string.Equals(arg, "--HELP", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(arg, "-H", StringComparison.OrdinalIgnoreCase))
-                {
-                    ShowUsage();
-                    return false;
-                }
-
-                if (string.Equals(arg, "--DEMO", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(arg, "-D", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(arg, "DEMO", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(arg, "D", StringComparison.OrdinalIgnoreCase))
-                {
-                    RunDemo();
-                    return false;
-                }
+                GetParameters.Clear();
+                GetSubReports.Clear();
+                return false;
             }
 
-            if (args.Length % 2 != 0)
-            {
-                Console.WriteLine("Invalid number of arguments.");
-                ShowUsage();
-                throw new ArgumentException("Invalid number of arguments. Expected key-value pairs.");
-            }
-
-            // Clear existing parameters before parsing new ones
             GetParameters.Clear();
+            GetSubReports.Clear();
 
-            for (int i = 0; i < args.Length; i += 2)
+            if (HasArgument(args, "--HELP", "-H"))
             {
-                string key = NormalizeParameterKey(args[i]);
-                if (!string.IsNullOrEmpty(key))
+                ShowUsage();
+                return false;
+            }
+
+            if (HasArgument(args, "--DEMO", "-D", "DEMO", "D"))
+            {
+                RunDemo();
+                return false;
+            }
+
+            var parsedParameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var parsedSubReports = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            for (var i = 0; i < args.Length; i++)
+            {
+                var parameterName = NormalizeParameterKey(args[i]);
+                var value = "true";
+
+                if (i + 1 >= args.Length || IsOptionToken(args[i + 1]))
                 {
-                    string value = args[i + 1].Trim('"');
-#if DEBUG
-                    value.FL_ConsoleWriteDebug();
-#endif
-                    GetParameters[key] = value;
+                    if (!IsBooleanOption(parameterName))
+                    {
+                        throw new ArgumentException($"Option {args[i]} requires a value.");
+                    }
                 }
+                else
+                {
+                    value = args[++i].Trim().Trim('"');
+                }
+
+                if (string.Equals(parameterName, AttachSubReportOption, StringComparison.OrdinalIgnoreCase))
+                {
+                    ParseSubReports(value, parsedSubReports);
+                    parsedParameters[AttachSubReportOption] = string.Join(",", parsedSubReports.Select(x => $"{x.Key}={x.Value}"));
+                }
+                else
+                {
+                    ValidateBooleanOption(parameterName, value);
+                    parsedParameters[parameterName] = value;
+                }
+            }
+
+            foreach (var parameter in parsedParameters)
+            {
+                GetParameters[parameter.Key] = parameter.Value;
+            }
+
+            foreach (var subReport in parsedSubReports)
+            {
+                GetSubReports[subReport.Key] = subReport.Value;
             }
 
             return true;
         }
 
         /// <summary>
-        /// Normalizes parameter keys by removing prefixes and finding proper parameter names
-        /// </summary>
-        private static string NormalizeParameterKey(string key)
-        {
-            string cleanKey = key.TrimStart('-').TrimStart('-').Trim('"');
-#if DEBUG
-            cleanKey.FL_ConsoleWriteDebug();
-#endif
-            // First check if it's a long parameter name
-            if (ParameterNames.ContainsKey(cleanKey))
-            {
-                return cleanKey;
-            }
-
-            // Then check if it's a short parameter name
-            if (ParameterShortToLong.TryGetValue(cleanKey, out string longName))
-            {
-                return longName;
-            }
-
-            return string.Empty;
-        }
-
-        /// <summary>
-        /// Interactive console-based argument parser
+        /// Interactive console-based argument parser.
         /// </summary>
         public static void ParseArgumentsInteractively()
         {
-            ShowUsage();
-            Console.WriteLine("Type 'exit' and press enter to close the console.");
-
             while (true)
             {
-                Console.WriteLine("\nEnter the arguments:");
-                string input = Console.ReadLine();
+                ShowInteractivePrompt();
+                var input = Console.ReadLine();
 
-                if (string.IsNullOrWhiteSpace(input) || string.Equals(input, "exit", StringComparison.OrdinalIgnoreCase))
+                if (string.IsNullOrWhiteSpace(input) || string.Equals(input.Trim(), "exit", StringComparison.OrdinalIgnoreCase))
                 {
                     return;
                 }
 
                 try
                 {
-                    string[] args = SplitCommandLineArgs(input);
+                    var args = SplitCommandLineArgs(input);
                     if (ParseArguments(args))
                     {
                         Execute();
@@ -213,266 +223,282 @@ Example:
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error: {ex.Message}");
+                    ShowUsage();
+                    LogError(ex, GetErrorLoggingEnabled());
                 }
             }
         }
 
         /// <summary>
-        /// Splits command line arguments handling quoted values
+        /// Splits an interactive command line while preserving quoted values.
         /// </summary>
-        private static string[] SplitCommandLineArgs(string commandLine)
+        public static string[] SplitCommandLineArgs(string commandLine)
         {
-            if (string.IsNullOrEmpty(commandLine))
-                return Array.Empty<string>();
-
-            var inQuotes = false;
-            var parts = new List<string>(8); // Pre-allocate reasonable capacity
-            var currentPart = new StringBuilder(50); // Pre-allocate reasonable capacity
-
-            foreach (char c in commandLine)
+            if (string.IsNullOrWhiteSpace(commandLine))
             {
-                if (c == '"')
+                return Array.Empty<string>();
+            }
+
+            var parts = new List<string>();
+            var currentPart = new StringBuilder();
+            var inQuotes = false;
+
+            foreach (var character in commandLine)
+            {
+                if (character == '"')
                 {
                     inQuotes = !inQuotes;
+                    continue;
                 }
-                else if (c == ' ' && !inQuotes)
+
+                if (char.IsWhiteSpace(character) && !inQuotes)
                 {
-                    if (currentPart.Length > 0)
-                    {
-                        parts.Add(currentPart.ToString());
-                        currentPart.Clear();
-                    }
+                    AddCurrentPart(parts, currentPart);
+                    continue;
                 }
-                else
-                {
-                    currentPart.Append(c);
-                }
+
+                currentPart.Append(character);
             }
 
-            if (currentPart.Length > 0)
+            if (inQuotes)
             {
-                parts.Add(currentPart.ToString());
+                throw new ArgumentException("Unterminated quoted argument.");
             }
 
+            AddCurrentPart(parts, currentPart);
             return parts.ToArray();
         }
 
         /// <summary>
-        /// Executes report processing based on the parsed arguments
+        /// Executes report processing using the currently parsed parameters.
         /// </summary>
         public static void Execute()
         {
-            if (GetParameters.TryGetValue("Test", out string testValue) && !string.IsNullOrEmpty(testValue))
+            if (GetParameters.TryGetValue("Test", out var testValue) && !string.IsNullOrEmpty(testValue))
             {
                 Console.WriteLine($"Test: {testValue}");
-                // Use Console instead of MessageBox for CLI application
             }
 
-            // Check for missing required parameters
-            var missingParams = RequiredParameters.Where(p => !GetParameters.ContainsKey(p)).ToList();
+            var missingParameters = RequiredParameters
+                .Where(parameter => !GetParameters.ContainsKey(parameter))
+                .ToArray();
 
-            if (missingParams.Count > 0)
+            if (missingParameters.Length > 0)
             {
-                ShowUsage();
-                StringBuilder exceptionMsg = new StringBuilder("Missing required parameters: ");
-                exceptionMsg.AppendLine(string.Join(", ", missingParams));
-                throw new ArgumentException(exceptionMsg.ToString());
+                throw new ArgumentException($"Missing required parameters: {string.Join(", ", missingParameters)}");
             }
 
-            ProcessReport();
+            ProcessReport(GetWaitForViewer(), GetErrorLoggingEnabled());
         }
 
         /// <summary>
-        /// Processes the report based on the parsed parameters
+        /// Loads and processes the report using the selected mode.
         /// </summary>
         public static void ProcessReport()
         {
-            if (!GetParameters.TryGetValue("ReportPath", out string reportPath) ||
-                !GetParameters.TryGetValue("ReportDataSource", out string dsFile) ||
-                !GetParameters.TryGetValue("ReportName", out string reportName) ||
-                !GetParameters.TryGetValue("Mode", out string mode) ||
-                !GetParameters.TryGetValue("PrintSetupFile", out string printSetupFile))
+            ProcessReport(GetWaitForViewer(), GetErrorLoggingEnabled());
+        }
+
+        private static void ProcessReport(bool waitForViewer, bool enableErrorLogging)
+        {
+            var reportPath = GetRequiredParameter("ReportPath");
+            var dataSourcePath = GetRequiredParameter("ReportDataSource");
+            var reportName = GetRequiredParameter("ReportName");
+            var mode = GetRequiredParameter("Mode");
+            var printSetupFile = GetRequiredParameter("PrintSetupFile");
+
+            ValidateFilesExist(reportPath, dataSourcePath);
+            var dataSet = LoadDataset(dataSourcePath);
+
+            var report = new FL_IRdlcReport
             {
-                throw new ArgumentException("Missing one or more required parameters.");
-            }
-
-            // Validate files exist
-            ValidateFilesExist(reportPath, dsFile);
-
-            // Create report compiler instance and configure it
-            FL_IRdlcReport rldcReportCompiler = null;
+                DataTables = dataSet,
+                ReportFile = reportPath,
+                ReportName = reportName,
+                PrintSettingFilePath = printSetupFile,
+                SubReports = new Dictionary<string, string>(GetSubReports, StringComparer.OrdinalIgnoreCase)
+            };
+            var reportOwnershipTransferred = false;
 
             try
             {
-                // Load data
-                DataSet ds = LoadDataset(dsFile);
+                LoadReportParameters(report, dataSet);
+                SetupPrintSettings(report, printSetupFile, mode);
 
-                // Create report compiler
-                rldcReportCompiler = new FL_IRdlcReport()
+                switch (mode.Trim().ToUpperInvariant())
                 {
-                    DataTables = ds,
-                    ReportFile = reportPath,
-                    ReportName = reportName,
-                    PrintSettingFilePath = printSetupFile
-                };
-
-                // Load parameters and setup print settings
-                LoadReportParameters(rldcReportCompiler, ds);
-                SetupPrintSettings(rldcReportCompiler, printSetupFile, mode);
-
-                // Process according to mode (using string constants to improve readability)
-                const string PREVIEW = "PREVIEW";
-                const string PRINTSETUP = "PRINTSETUP";
-                const string PRINT = "PRINT";
-                const string EXPORT = "EXPORT";
-
-                string upperMode = mode.ToUpperInvariant();
-
-                switch (upperMode)
-                {
-                    case PREVIEW:
-                    case PRINTSETUP:
-                        rldcReportCompiler.AltTriggerPrintSettings = string.Equals(mode, "PrintSetup", StringComparison.OrdinalIgnoreCase);
-                        PreviewReport(rldcReportCompiler);
+                    case PreviewMode:
+                        PreviewReport(report, waitForViewer, enableErrorLogging);
+                        reportOwnershipTransferred = !waitForViewer;
                         break;
-                    case PRINT:
-                        PrintReport(rldcReportCompiler);
+                    case PrintSetupMode:
+                    case PrintSettingsMode:
+                        report.AltTriggerPrintSettings = true;
+                        PreviewReport(report, waitForViewer, enableErrorLogging);
+                        reportOwnershipTransferred = !waitForViewer;
                         break;
-                    case EXPORT:
-                        ExportReport(rldcReportCompiler);
+                    case PrintMode:
+                        PrintReport(report);
+                        break;
+                    case ExportMode:
+                        ExportReport(report);
                         break;
                     default:
-                        throw new ArgumentException($"Invalid mode: {mode}. Supported modes: Preview, Print, PrintSetup, Export");
+                        throw new ArgumentException($"Invalid mode: {mode}. Supported modes: Preview, Print, PrintSetup, PrintSettings, Export");
                 }
             }
             catch (Exception ex)
             {
-                rldcReportCompiler?.Dispose();
                 throw new Exception($"Error processing report: {ex.Message}", ex);
+            }
+            finally
+            {
+                if (!reportOwnershipTransferred)
+                {
+                    report.Dispose();
+                }
             }
         }
 
         /// <summary>
-        /// Validates that required files exist
+        /// Validates that required input files exist.
         /// </summary>
-        private static void ValidateFilesExist(string reportPath, string dsFile)
+        private static void ValidateFilesExist(string reportPath, string dataSourcePath)
         {
             if (!File.Exists(reportPath))
             {
                 throw new FileNotFoundException("Report file not found", reportPath);
             }
 
-            if (!File.Exists(dsFile))
+            if (!File.Exists(dataSourcePath))
             {
-                throw new FileNotFoundException("Data source file not found", dsFile);
+                throw new FileNotFoundException("Data source file not found", dataSourcePath);
             }
         }
 
         /// <summary>
-        /// Loads dataset from XML file
+        /// Loads a dataset from the supplied XML file once.
         /// </summary>
-        private static DataSet LoadDataset(string dsFile)
+        private static DataSet LoadDataset(string dataSourcePath)
         {
             try
             {
-                string xmlContent = File.ReadAllText(dsFile);
-                DataSet ds = xmlContent.FL_CastXmlToDataSet();
-
-                if (ds.Tables.Count == 0)
+                var dataSet = File.ReadAllText(dataSourcePath).FL_CastXmlToDataSet();
+                if (dataSet.Tables.Count == 0)
                 {
-                    throw new Exception("No data tables found in the data source");
+                    throw new InvalidDataException("No data tables found in the data source");
                 }
 
-                return ds;
+                return dataSet;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not InvalidDataException)
             {
-                throw new Exception($"Error loading data source: {ex.Message}", ex);
+                throw new InvalidDataException($"Error loading data source: {ex.Message}", ex);
             }
         }
 
-        /// <summary>
-        /// Loads report parameters from the dataset
-        /// </summary>
-        private static void LoadReportParameters(FL_IRdlcReport report, DataSet ds)
+        private static void LoadReportParameters(FL_IRdlcReport report, DataSet dataSet)
         {
-            const string PARAMS_TABLE = "RldcParameters";
-
-            if (ds.Tables.Contains(PARAMS_TABLE) && ds.Tables[PARAMS_TABLE].Rows.Count > 0)
+            if (!dataSet.Tables.Contains(ParametersTableName))
             {
-                DataTable paramsTable = ds.Tables[PARAMS_TABLE];
-                report.ReportParameters = new List<FL_RdlcReportParameter>(paramsTable.Rows.Count);
+                return;
+            }
 
-                foreach (DataRow row in paramsTable.Rows)
+            var parameterTable = dataSet.Tables[ParametersTableName];
+            if (parameterTable.Rows.Count == 0)
+            {
+                return;
+            }
+
+            if (!parameterTable.Columns.Contains("Name") || !parameterTable.Columns.Contains("Value"))
+            {
+                throw new InvalidDataException($"The {ParametersTableName} table must contain Name and Value columns.");
+            }
+
+            report.ReportParameters = new List<FL_RdlcReportParameter>(parameterTable.Rows.Count);
+            foreach (DataRow row in parameterTable.Rows)
+            {
+                report.ReportParameters.Add(new FL_RdlcReportParameter
                 {
-                    report.ReportParameters.Add(new FL_RdlcReportParameter
-                    {
-                        Name = row["Name"]?.ToString(),
-                        Value = row["Value"]
-                    });
-                }
+                    Name = row["Name"]?.ToString(),
+                    Value = row["Value"]
+                });
             }
         }
 
-        /// <summary>
-        /// Sets up print settings from file
-        /// </summary>
         private static void SetupPrintSettings(FL_IRdlcReport report, string printSetupFile, string mode)
         {
-            string setupDir = Path.GetDirectoryName(printSetupFile);
-
-            if (!string.IsNullOrEmpty(setupDir) && !Directory.Exists(setupDir))
+            if (string.IsNullOrWhiteSpace(printSetupFile))
             {
-                Directory.CreateDirectory(setupDir);
+                throw new ArgumentException("PrintSetupFile cannot be empty.");
             }
 
-            if (File.Exists(printSetupFile))
+            var setupDirectory = Path.GetDirectoryName(printSetupFile);
+            if (!string.IsNullOrEmpty(setupDirectory))
             {
-                string fileContent = File.ReadAllText(printSetupFile);
-                if (!string.IsNullOrWhiteSpace(fileContent))
-                {
-                    var pageSettings = fileContent.FL_CastToClass<CustomPrintDialog>();
-                    if (pageSettings?.CPageSettings != null)
-                    {
-                        report.PrintSettings = pageSettings;
-                    }
-                    else if (!string.Equals(mode, "PrintSetup", StringComparison.OrdinalIgnoreCase) &&
-                             !string.Equals(mode, "Preview", StringComparison.OrdinalIgnoreCase))
-                    {
-                        throw new Exception("Invalid print settings file format");
-                    }
-                }
+                Directory.CreateDirectory(setupDirectory);
+            }
+
+            if (!File.Exists(printSetupFile))
+            {
+                return;
+            }
+
+            var fileContent = File.ReadAllText(printSetupFile);
+            if (string.IsNullOrWhiteSpace(fileContent))
+            {
+                return;
+            }
+
+            var pageSettings = fileContent.FL_CastToClass<CustomPrintDialog>();
+            if (pageSettings?.CPageSettings != null)
+            {
+                report.PrintSettings = pageSettings;
+                return;
+            }
+
+            var normalizedMode = mode.Trim().ToUpperInvariant();
+            if (normalizedMode != PreviewMode && normalizedMode != PrintSetupMode && normalizedMode != PrintSettingsMode)
+            {
+                throw new InvalidDataException("Invalid print settings file format.");
             }
         }
 
         /// <summary>
-        /// Previews a report using the ReportViewer form
+        /// Shows a report in the canonical viewer form.
         /// </summary>
-        /// <param name="report">The report to preview</param>
         public static void PreviewReport(FL_IRdlcReport report)
         {
-            using var form = new ReportForm.FL_RdlcReportViewerForm(report);
-            form.ShowDialog();
+            PreviewReport(report, waitForViewer: true, enableErrorLogging: false);
         }
 
         /// <summary>
-        /// Gets the export format from the parameters
+        /// Shows a report and optionally returns immediately while the viewer remains open.
         /// </summary>
-        /// <returns>The export format enumeration value</returns>
+        /// <param name="report">Report to display.</param>
+        /// <param name="waitForViewer">When true, waits until the viewer closes.</param>
+        /// <param name="enableErrorLogging">When true, writes detailed viewer exceptions to the CLI.</param>
+        public static void PreviewReport(FL_IRdlcReport report, bool waitForViewer, bool enableErrorLogging = false)
+        {
+            ArgumentNullException.ThrowIfNull(report);
+
+            if (waitForViewer)
+            {
+                using var form = new ReportForm.FL_RdlcReportViewerForm(report);
+                form.ShowDialog();
+                return;
+            }
+
+            LaunchViewer(report, enableErrorLogging);
+        }
+
+        /// <summary>
+        /// Gets the configured export format.
+        /// </summary>
         public static ExportFormat GetExportFormat()
         {
-            if (!GetParameters.TryGetValue("ExportFormat", out string formatParam))
-            {
-                throw new ArgumentException("ExportFormat parameter is required for export operations");
-            }
-
-            if (string.IsNullOrEmpty(formatParam))
-            {
-                throw new ArgumentException("Export format cannot be empty");
-            }
-
-            return formatParam.ToUpperInvariant() switch
+            var format = GetRequiredParameter("ExportFormat");
+            return format.Trim().ToUpperInvariant() switch
             {
                 "PDF" => ExportFormat.PDF,
                 "EXCEL" => ExportFormat.EXCEL,
@@ -483,48 +509,31 @@ Example:
                 "HTML4_0" => ExportFormat.HTML4_0,
                 "HTML5" => ExportFormat.HTML5,
                 "MHTML" => ExportFormat.MHTML,
-                _ => throw new ArgumentException($"Unsupported export format: {formatParam}")
+                _ => throw new ArgumentException($"Unsupported export format: {format}")
             };
         }
 
         /// <summary>
-        /// Exports a report to the specified format
+        /// Exports a report to the configured path and format.
         /// </summary>
-        /// <param name="report">The report to export</param>
         public static void ExportReport(FL_IRdlcReport report)
         {
-            if (!GetParameters.TryGetValue("ExportFormat", out _))
-            {
-                throw new ArgumentException("ExportFormat is required for export operations");
-            }
-
-            if (!GetParameters.TryGetValue("ExportPath", out string exportPath))
-            {
-                throw new ArgumentException("ExportPath is required for export operations");
-            }
-
+            var exportPath = GetRequiredParameter("ExportPath");
+            report.ExportFormat = GetExportFormat();
             report.ExportFileName = exportPath;
 
-            try
+            var exportDirectory = Path.GetDirectoryName(exportPath);
+            if (!string.IsNullOrEmpty(exportDirectory))
             {
-                string exportDir = Path.GetDirectoryName(report.ExportFileName);
-                if (!string.IsNullOrEmpty(exportDir) && !Directory.Exists(exportDir))
-                {
-                    Directory.CreateDirectory(exportDir);
-                }
+                Directory.CreateDirectory(exportDirectory);
+            }
 
-                report.Export();
-            }
-            finally
-            {
-                report?.Dispose();
-            }
+            report.Export();
         }
 
         /// <summary>
-        /// Prints a report using the LocalReport class
+        /// Prints a report using the canonical viewer form.
         /// </summary>
-        /// <param name="report">The report to print</param>
         public static void PrintReport(FL_IRdlcReport report)
         {
             report.TriggerPrint = true;
@@ -533,12 +542,227 @@ Example:
         }
 
         /// <summary>
-        /// Gets a copy of the current parameter dictionary
+        /// Gets a copy of the currently parsed parameters.
         /// </summary>
-        /// <returns>Dictionary of parameters</returns>
         public static Dictionary<string, string> GetCurrentParameters()
         {
             return new Dictionary<string, string>(GetParameters, StringComparer.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Writes a CLI error using the currently configured logging option.
+        /// </summary>
+        public static void LogError(Exception exception)
+        {
+            LogError(exception, GetErrorLoggingEnabled());
+        }
+
+        private static void LaunchViewer(FL_IRdlcReport report, bool enableErrorLogging)
+        {
+            var viewerReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var viewerThread = new Thread(() => RunViewer(report, enableErrorLogging, viewerReady))
+            {
+                IsBackground = false,
+                Name = $"RDLC viewer: {report.ReportName}"
+            };
+            viewerThread.SetApartmentState(ApartmentState.STA);
+            viewerThread.Start();
+            viewerReady.Task.GetAwaiter().GetResult();
+        }
+
+        private static void RunViewer(
+            FL_IRdlcReport report,
+            bool enableErrorLogging,
+            TaskCompletionSource<bool> viewerReady)
+        {
+            try
+            {
+                Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
+                using var form = new ReportForm.FL_RdlcReportViewerForm(report);
+                form.Shown += (_, _) => viewerReady.TrySetResult(true);
+                Application.Run(form);
+            }
+            catch (Exception ex)
+            {
+                LogError(ex, enableErrorLogging, report.ReportFile);
+            }
+            finally
+            {
+                report.Dispose();
+                viewerReady.TrySetResult(true);
+            }
+        }
+
+        private static bool HasArgument(IEnumerable<string> args, params string[] expectedArguments)
+        {
+            return args.Any(argument => expectedArguments.Any(expected =>
+                string.Equals(argument, expected, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        private static string NormalizeParameterKey(string key)
+        {
+            var cleanKey = key.Trim().Trim('"').TrimStart('-');
+
+            if (ParameterNames.ContainsKey(cleanKey))
+            {
+                return cleanKey;
+            }
+
+            if (ParameterShortToLong.TryGetValue(cleanKey, out var longName))
+            {
+                return longName;
+            }
+
+            throw new ArgumentException($"Unknown option: {key}");
+        }
+
+        private static bool IsOptionToken(string value)
+        {
+            return value.TrimStart().StartsWith("-", StringComparison.Ordinal);
+        }
+
+        private static bool IsBooleanOption(string parameterName)
+        {
+            return string.Equals(parameterName, WaitForViewerOption, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(parameterName, EnableErrorLoggingOption, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void ValidateBooleanOption(string parameterName, string value)
+        {
+            if (IsBooleanOption(parameterName) && !TryParseBoolean(value, out _))
+            {
+                throw new ArgumentException($"{parameterName} must be true or false.");
+            }
+        }
+
+        private static bool GetWaitForViewer()
+        {
+            return GetBooleanParameter(WaitForViewerOption, defaultValue: true);
+        }
+
+        private static bool GetErrorLoggingEnabled()
+        {
+            return GetBooleanParameter(EnableErrorLoggingOption, defaultValue: false);
+        }
+
+        private static bool GetBooleanParameter(string parameterName, bool defaultValue)
+        {
+            if (!GetParameters.TryGetValue(parameterName, out var value) || string.IsNullOrWhiteSpace(value))
+            {
+                return defaultValue;
+            }
+
+            if (TryParseBoolean(value, out var result))
+            {
+                return result;
+            }
+
+            throw new ArgumentException($"{parameterName} must be true or false.");
+        }
+
+        private static bool TryParseBoolean(string value, out bool result)
+        {
+            if (bool.TryParse(value, out result))
+            {
+                return true;
+            }
+
+            if (string.Equals(value, "1", StringComparison.OrdinalIgnoreCase))
+            {
+                result = true;
+                return true;
+            }
+
+            if (string.Equals(value, "0", StringComparison.OrdinalIgnoreCase))
+            {
+                result = false;
+                return true;
+            }
+
+            result = false;
+            return false;
+        }
+
+        private static void ShowInteractivePrompt()
+        {
+            lock (ConsoleSync)
+            {
+                ShowUsage();
+                Console.WriteLine("Type 'exit' and press enter to close the console.");
+                Console.WriteLine("Enter the arguments:");
+            }
+        }
+
+        private static void LogError(Exception exception, bool enableErrorLogging, string reportPath = null)
+        {
+            var context = string.IsNullOrWhiteSpace(reportPath)
+                ? string.Empty
+                : $" for report '{reportPath}'";
+
+            lock (ConsoleSync)
+            {
+                if (enableErrorLogging)
+                {
+                    Console.Error.WriteLine($"Error{context}: {exception}");
+                }
+                else
+                {
+                    Console.Error.WriteLine($"Error{context}: {exception.Message}");
+                }
+            }
+        }
+
+        private static void ParseSubReports(string value, IDictionary<string, string> subReports)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                throw new ArgumentException("AttachSubReport value is missing.");
+            }
+
+            foreach (var entry in value.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var separatorIndex = entry.IndexOf('=');
+                if (separatorIndex <= 0 || separatorIndex == entry.Length - 1)
+                {
+                    throw new ArgumentException($"AttachSubReport entry is invalid: {entry}");
+                }
+
+                var subReportName = entry[..separatorIndex].Trim();
+                var subReportPath = entry[(separatorIndex + 1)..].Trim();
+
+                if (subReportName.Length == 0 || subReportPath.Length == 0)
+                {
+                    throw new ArgumentException($"AttachSubReport entry is invalid: {entry}");
+                }
+
+                if (!File.Exists(subReportPath))
+                {
+                    throw new FileNotFoundException("Sub report file not found", subReportPath);
+                }
+
+                subReports[subReportName] = subReportPath;
+            }
+        }
+
+        private static string GetRequiredParameter(string parameterName)
+        {
+            if (!GetParameters.TryGetValue(parameterName, out var value) || string.IsNullOrWhiteSpace(value))
+            {
+                throw new ArgumentException($"{parameterName} is required.");
+            }
+
+            return value;
+        }
+
+        private static void AddCurrentPart(ICollection<string> parts, StringBuilder currentPart)
+        {
+            if (currentPart.Length == 0)
+            {
+                return;
+            }
+
+            parts.Add(currentPart.ToString());
+            currentPart.Clear();
         }
     }
 }

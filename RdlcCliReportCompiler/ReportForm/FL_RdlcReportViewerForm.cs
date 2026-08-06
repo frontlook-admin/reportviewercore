@@ -1,18 +1,12 @@
-﻿
-
 using FrontLookCoreDbAccessLibrary.Desktop.Rdlc.FL_RDLC;
 using FrontLookCoreLibraryAssembly.FL_General;
-using FrontLookCoreLibraryAssembly.FL_GlobalClasses;
 using Microsoft.Reporting.WinForms;
-using Microsoft.ReportViewer.Common.FrontLookCode;
 using Microsoft.ReportViewer.WinForms.FrontLookCode;
 using System;
-using System.Collections.Generic;
 using System.Data;
 using System.Drawing.Printing;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Windows.Forms;
 
 namespace CliReportCompiler.ReportForm
@@ -20,275 +14,232 @@ namespace CliReportCompiler.ReportForm
     public class FL_RdlcReportViewerForm : Form
     {
         private readonly ReportViewer reportViewer;
-        public FL_IRdlcReport reportCompiler { get; set; } = new FL_IRdlcReport();
+        private bool reportLoaded;
 
-        public FL_RdlcReportViewerForm(FL_IRdlcReport _reportCompiler)
-        {
-            Text = "Report viewer";
-            reportCompiler = _reportCompiler;
-            WindowState = FormWindowState.Maximized;
-            reportViewer = new ReportViewer();
-            reportViewer.Dock = DockStyle.Fill;
-            Controls.Add(reportViewer);
-        }
+        public FL_IRdlcReport reportCompiler { get; set; } = new();
 
         public FL_RdlcReportViewerForm()
         {
             Text = "Report viewer";
             WindowState = FormWindowState.Maximized;
-            reportViewer = new ReportViewer();
-            reportViewer.Dock = DockStyle.Fill;
+            reportViewer = new ReportViewer
+            {
+                Dock = DockStyle.Fill
+            };
             Controls.Add(reportViewer);
+        }
+
+        public FL_RdlcReportViewerForm(FL_IRdlcReport reportCompiler)
+            : this()
+        {
+            this.reportCompiler = reportCompiler ?? throw new ArgumentNullException(nameof(reportCompiler));
         }
 
         protected override void OnLoad(EventArgs e)
         {
-            Load();
+            base.OnLoad(e);
+
+            LoadReport();
             reportViewer.RefreshReport();
-
-
 
             if (reportCompiler.TriggerPrintSettings)
             {
-                //reportViewer.PageSetupDialog();
-                var pageSetting = reportViewer?.GetPageSettings();
-                reportCompiler.PrintSettings = new CustomPrintDialog(reportViewer.PrinterSettings, pageSetting);
-
-                reportCompiler.PrintSettingFilePath = reportViewer?.PrintSettingFilePath;
-
-                PrinterSettings ps = new PrinterSettings();
-                if (reportCompiler?.PrintSettings != null)
-                {
-
-                    using (var pd = reportCompiler?.PrintSettings?.GetPrintDialog())
-                    {
-
-
-                        pd.PrinterSettings.DefaultPageSettings.PaperSize = pageSetting?.PaperSize;
-                        pd.PrinterSettings.DefaultPageSettings.Landscape = (pageSetting?.Landscape).GetValueOrDefault(false);
-                        pd.PrinterSettings.DefaultPageSettings.Margins = pageSetting?.Margins;
-                        pd.PrinterSettings.DefaultPageSettings.Color = (pageSetting?.Color).GetValueOrDefault(false);
-                        pd.PrinterSettings.DefaultPageSettings.PaperSource = pageSetting?.PaperSource;
-                        pd.PrinterSettings.DefaultPageSettings.PrinterResolution = pageSetting?.PrinterResolution;
-
-                        ps = reportViewer.GetPrintDialog(pd);
-
-                    }
-                }
-
-                var pdz = new PrintDialog();
-                pdz.PrinterSettings = ps;
-
-
-                var ddr = reportViewer.PageSetupDialog();
-
-
-                if (ddr == DialogResult.OK)
-                {
-                    //CurrentReport.PageSettings = pageSetupDialog.PageSettings;
-                    //PrinterSettings = pageSetupDialog.PrinterSettings;
-
-
-                    reportViewer.PrinterSettings = ps;
-
-                    //update the page settings and printersettings in reportcompiler
-                    reportCompiler.PrintSettings = new CustomPrintDialog(pdz, reportViewer.CurrentReportPageSetting);
-                    if (!string.IsNullOrEmpty(reportCompiler.PrintSettingFilePath))
-                    {
-                        //update the compiler print settings file
-                        var json = reportCompiler.PrintSettings.FL_CastToJson();
-                        File.WriteAllText(reportCompiler.PrintSettingFilePath, json);
-                    }
-
-                    reportViewer.RefreshReport();
-                }
-
+                ShowPrintSetup();
             }
             else
             {
-                if (reportCompiler.PrintSettings != null)
-                {
-                    reportViewer.PrintSettingFilePath = reportCompiler.PrintSettingFilePath;
-                    reportViewer.SetPageSettings(reportCompiler.PrintSettings.CPageSettings.GetPageSettings());
-                    reportViewer.Refresh();
-                    if (reportCompiler.TriggerPrint)
-                    {
-                        reportCompiler.TriggerPrint = false;
-                        reportViewer.DPrint();
-
-                        this.Close();
-                    }
-                }
+                ApplyStoredPrintSettings();
             }
-
-            base.OnLoad(e);
         }
 
         public void Print()
         {
-            /*
-            //reportViewer.PrintSettingFilePath = reportCompiler.PrintSettingFilePath;
-            reportCompiler.Load(reportViewer.LocalReport);
-            reportViewer.PrintSettingFilePath = reportCompiler.PrintSettingFilePath; 
-            if (File.Exists(reportCompiler.ReportFile))
-            {
-                try
-                {
-                    var customPrintDialog = File.ReadAllLines(reportCompiler.ReportFile).FL_CastToClass<CustomPrintDialog>();
-
-                    reportViewer.CustomPrintDialog = customPrintDialog;
-                }
-                catch (Exception ex)
-                {
-
-                }
-            }
+            LoadReport();
             reportViewer.RefreshReport();
-            reportViewer.m_lastUIState = UIState.ProcessingPartial;
-            */
-
-            Load();
-            reportViewer.RefreshReport();
-            base.OnLoad(null);
             reportViewer.DPrint();
         }
 
-
-        /// <summary>
-        /// Load the report
-        /// </summary>
-        /// <exception cref="Exception"></exception>
-        private void Load()
+        private void LoadReport()
         {
+            if (reportLoaded)
+            {
+                return;
+            }
+
             if (reportCompiler.DataTables == null || reportCompiler.DataTables.Tables.Count == 0)
             {
-                throw new Exception("No data to load");
+                throw new InvalidOperationException("No data to load");
             }
-            if (string.IsNullOrEmpty(reportCompiler.ReportFile))
+
+            if (string.IsNullOrWhiteSpace(reportCompiler.ReportFile))
             {
-                throw new Exception("No report file to load");
+                throw new InvalidOperationException("No report file to load");
             }
+
             if (!File.Exists(reportCompiler.ReportFile))
             {
-                throw new Exception("Report file not found");
-            }
-            using var fs = new FileStream(reportCompiler.ReportFile, FileMode.Open);
-            reportViewer.LocalReport.LoadReportDefinition(fs);
-
-            bool ProcessSubReport = false;
-
-            if (reportCompiler.SubReports.Count > 0)
-            {
-                reportViewer.LocalReport.ShowDetailedSubreportMessages = true;
-
-                foreach (var subReport in reportCompiler.SubReports)
-                {
-                    var subReportName = subReport.Key;
-                    var subReportPath = subReport.Value;
-                    if (string.IsNullOrEmpty(subReportPath))
-                    {
-                        continue;
-                    }
-                    if (File.Exists(subReportPath))
-                    {
-                        var subReportBytes = File.ReadAllBytes(subReportPath);
-                        using var subFs = new MemoryStream(subReportBytes);
-                        reportViewer.LocalReport.LoadSubreportDefinition(subReportName, subFs);
-                        ProcessSubReport = true;
-                    }
-                    else
-                    {
-                        //throw new Exception($"Sub report file not found: {subReportPath}");
-                        continue;
-                    }
-                }
-            }
-            reportViewer.LocalReport.EnableExternalImages = true;
-            reportViewer.LocalReport.EnableHyperlinks = true;
-
-            reportViewer.PrintSettingFilePath = reportCompiler.PrintSettingFilePath;
-            if (File.Exists(reportCompiler.ReportFile))
-            {
-                try
-                {
-                    var customPrintDialog = File.ReadAllLines(reportCompiler.ReportFile).FL_CastToClass<CustomPrintDialog>();
-
-                    reportViewer.CustomPrintDialog = customPrintDialog;
-                }
-                catch (Exception ex)
-                {
-
-                }
-            }
-            reportViewer.CustomPrintDialog = reportCompiler.PrintSettings;
-            var rqdParameters = reportViewer.LocalReport.GetParameters().Count;
-
-
-
-            if (rqdParameters > 0)
-            {
-
-                if (reportCompiler.ReportParameters == null || reportCompiler.ReportParameters.Count == 0)
-                {
-                    throw new Exception("No parameters to load");
-                }
-
-                var rqdParametersList = reportViewer.LocalReport.GetParameters().ToList();
-                if (rqdParameters > reportCompiler.ReportParameters.Count)
-                {
-                    //find the missing parameters
-                    var missingParameters = rqdParametersList.FindAll(x => reportCompiler.ReportParameters.Find(y => y.Name == x.Name) == null);
-                    //throw exception mentioning the missing parameters
-                    throw new Exception($"Missing parameters: {string.Join(",", missingParameters)}");
-                }
-                var _rqdParametersList = rqdParametersList.Select(x => x.Name).ToList();
-                //add the parameters which are required by the report
-                var rpp = new List<FL_RdlcReportParameter>();
-                _rqdParametersList.ForEach(x =>
-                {
-                    var parameter = reportCompiler.ReportParameters.Where(y => y.Name == x);
-                    if (parameter.Count() == 0)
-                    {
-                        throw new Exception($"Missing parameter: {x}");
-                    }
-                    rpp.Add(parameter.First());
-                });
-
-                //set the parameters
-                reportViewer.LocalReport.SetParameters(rpp.Select(p => new ReportParameter(p.Name, p.Value.ToString())));
+                throw new FileNotFoundException("Report file not found", reportCompiler.ReportFile);
             }
 
-            reportCompiler.DataTables.Tables.Cast<DataTable>().ToList().ForEach(x =>
+            using (var reportStream = File.OpenRead(reportCompiler.ReportFile))
             {
-                reportViewer.LocalReport.DataSources.Add(new ReportDataSource(x.TableName, x));
-            });
+                reportViewer.LocalReport.LoadReportDefinition(reportStream);
+            }
 
+            var hasSubReports = LoadSubreports();
+            LoadParameters();
+            BindDataSources();
 
-
-            if (ProcessSubReport)
+            if (hasSubReports)
             {
-                // Handle subreport data source
-
-                reportViewer.LocalReport.SubreportProcessing += (sender, e) =>
+                reportViewer.LocalReport.SubreportProcessing += (_, eventArgs) =>
                 {
-
-
-                    reportCompiler.DataTables.Tables.Cast<DataTable>().ToList().ForEach(x =>
+                    foreach (DataTable table in reportCompiler.DataTables.Tables)
                     {
-                        // Pass the same datasets to the subreport
-                        e.DataSources.Add(new ReportDataSource(x.TableName, x));
-                    });
+                        eventArgs.DataSources.Add(new ReportDataSource(table.TableName, table));
+                    }
                 };
             }
 
-            //add print settings file path
-            if (!string.IsNullOrEmpty(reportCompiler.PrintSettingFilePath))
-            {
+            reportViewer.PrintSettingFilePath = reportCompiler.PrintSettingFilePath;
+            reportViewer.CustomPrintDialog = reportCompiler.PrintSettings;
+            reportLoaded = true;
+        }
 
-                reportViewer.PrintSettingFilePath = reportCompiler.PrintSettingFilePath;
+        private bool LoadSubreports()
+        {
+            var subReports = reportCompiler.SubReports;
+            if (subReports == null || subReports.Count == 0)
+            {
+                return false;
+            }
+
+            reportViewer.LocalReport.ShowDetailedSubreportMessages = true;
+            var loadedSubreport = false;
+
+            foreach (var subReport in subReports)
+            {
+                if (string.IsNullOrWhiteSpace(subReport.Value) || !File.Exists(subReport.Value))
+                {
+                    continue;
+                }
+
+                using var subReportStream = File.OpenRead(subReport.Value);
+                reportViewer.LocalReport.LoadSubreportDefinition(subReport.Key, subReportStream);
+                loadedSubreport = true;
+            }
+
+            return loadedSubreport;
+        }
+
+        private void LoadParameters()
+        {
+            var requiredParameters = reportViewer.LocalReport.GetParameters().ToList();
+            if (requiredParameters.Count == 0)
+            {
+                return;
+            }
+
+            if (reportCompiler.ReportParameters == null || reportCompiler.ReportParameters.Count == 0)
+            {
+                throw new InvalidDataException("No parameters to load");
+            }
+
+            var suppliedParameters = reportCompiler.ReportParameters
+                .Where(parameter => !string.IsNullOrWhiteSpace(parameter.Name))
+                .GroupBy(parameter => parameter.Name, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.Last(), StringComparer.OrdinalIgnoreCase);
+
+            var missingParameters = requiredParameters
+                .Where(parameter => !suppliedParameters.ContainsKey(parameter.Name))
+                .Select(parameter => parameter.Name)
+                .ToArray();
+
+            if (missingParameters.Length > 0)
+            {
+                throw new InvalidDataException($"Missing parameters: {string.Join(",", missingParameters)}");
+            }
+
+            reportViewer.LocalReport.SetParameters(requiredParameters.Select(parameter =>
+            {
+                var suppliedParameter = suppliedParameters[parameter.Name];
+                return new ReportParameter(parameter.Name, suppliedParameter.Value?.ToString() ?? string.Empty);
+            }));
+        }
+
+        private void BindDataSources()
+        {
+            foreach (DataTable table in reportCompiler.DataTables.Tables)
+            {
+                reportViewer.LocalReport.DataSources.Add(new ReportDataSource(table.TableName, table));
+            }
+
+            reportViewer.LocalReport.EnableExternalImages = true;
+            reportViewer.LocalReport.EnableHyperlinks = true;
+        }
+
+        private void ApplyStoredPrintSettings()
+        {
+            if (reportCompiler.PrintSettings?.CPageSettings == null)
+            {
+                return;
+            }
+
+            reportViewer.SetPageSettings(reportCompiler.PrintSettings.CPageSettings.GetPageSettings());
+            reportViewer.Refresh();
+
+            if (reportCompiler.TriggerPrint)
+            {
+                reportCompiler.TriggerPrint = false;
+                reportViewer.DPrint();
+                Close();
             }
         }
+
+        private void ShowPrintSetup()
+        {
+            var pageSetting = reportViewer.GetPageSettings();
+            reportCompiler.PrintSettings = new CustomPrintDialog(reportViewer.PrinterSettings, pageSetting);
+            reportViewer.CustomPrintDialog = reportCompiler.PrintSettings;
+
+            PrinterSettings printerSettings;
+            using (var printDialog = reportCompiler.PrintSettings.GetPrintDialogSettings().CreatePrintDialog())
+            {
+                ApplyPageSettings(printDialog, pageSetting);
+                printerSettings = reportViewer.GetPrintDialog(printDialog);
+            }
+
+            using var configuredDialog = new PrintDialog
+            {
+                PrinterSettings = printerSettings
+            };
+
+            if (reportViewer.PageSetupDialog() != DialogResult.OK)
+            {
+                return;
+            }
+
+            reportViewer.PrinterSettings = printerSettings;
+            reportCompiler.PrintSettings = new CustomPrintDialog(configuredDialog, reportViewer.CurrentReportPageSetting);
+            reportViewer.CustomPrintDialog = reportCompiler.PrintSettings;
+
+            if (!string.IsNullOrWhiteSpace(reportCompiler.PrintSettingFilePath))
+            {
+                File.WriteAllText(reportCompiler.PrintSettingFilePath, reportCompiler.PrintSettings.FL_CastToJson());
+            }
+
+            reportViewer.RefreshReport();
+        }
+
+        private static void ApplyPageSettings(PrintDialog printDialog, PageSettings pageSetting)
+        {
+            var defaultPageSettings = printDialog.PrinterSettings.DefaultPageSettings;
+            defaultPageSettings.PaperSize = pageSetting.PaperSize;
+            defaultPageSettings.Landscape = pageSetting.Landscape;
+            defaultPageSettings.Margins = pageSetting.Margins;
+            defaultPageSettings.Color = pageSetting.Color;
+            defaultPageSettings.PaperSource = pageSetting.PaperSource;
+            defaultPageSettings.PrinterResolution = pageSetting.PrinterResolution;
+        }
     }
-
-
 }

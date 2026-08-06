@@ -27,6 +27,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CliReportCompiler", "RdlcCl
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FrontLookCoreDbAccessLibrary.Desktop.Rdlc", "..\FrontLookCore\FrontLookCoreDbAccessLibrary\FrontLookCoreDbAccessLibrary.Desktop.Rdlc\FrontLookCoreDbAccessLibrary.Desktop.Rdlc.csproj", "{2C2A3F5F-756B-4B54-A12A-4B970BBFCFB9}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RdlcCliReportCompiler.Tests", "RdlcCliReportCompiler.Tests\RdlcCliReportCompiler.Tests.csproj", "{117AB1DF-865E-4567-B0F2-63226F243838}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Microsoft.ReportViewer.MAUI", "Microsoft.ReportViewer.MAUI\Microsoft.ReportViewer.MAUI.csproj", "{BDCEF3A2-DEED-42A5-9C6B-DE00D07D6F84}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReportViewerCore.Sample.MAUI", "ReportViewerCore.Sample.MAUI\ReportViewerCore.Sample.MAUI.csproj", "{C33495C0-8A8B-40DF-9C4E-4A0A0AB29256}"
@@ -187,6 +189,18 @@ Global
 		{2C2A3F5F-756B-4B54-A12A-4B970BBFCFB9}.Release|x86.Build.0 = Release|Any CPU
 		{2C2A3F5F-756B-4B54-A12A-4B970BBFCFB9}.Release|x64.ActiveCfg = Release|Any CPU
 		{2C2A3F5F-756B-4B54-A12A-4B970BBFCFB9}.Release|x64.Build.0 = Release|Any CPU
+		{117AB1DF-865E-4567-B0F2-63226F243838}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{117AB1DF-865E-4567-B0F2-63226F243838}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{117AB1DF-865E-4567-B0F2-63226F243838}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{117AB1DF-865E-4567-B0F2-63226F243838}.Debug|x86.Build.0 = Debug|Any CPU
+		{117AB1DF-865E-4567-B0F2-63226F243838}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{117AB1DF-865E-4567-B0F2-63226F243838}.Debug|x64.Build.0 = Debug|Any CPU
+		{117AB1DF-865E-4567-B0F2-63226F243838}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{117AB1DF-865E-4567-B0F2-63226F243838}.Release|Any CPU.Build.0 = Release|Any CPU
+		{117AB1DF-865E-4567-B0F2-63226F243838}.Release|x86.ActiveCfg = Release|Any CPU
+		{117AB1DF-865E-4567-B0F2-63226F243838}.Release|x86.Build.0 = Release|Any CPU
+		{117AB1DF-865E-4567-B0F2-63226F243838}.Release|x64.ActiveCfg = Release|Any CPU
+		{117AB1DF-865E-4567-B0F2-63226F243838}.Release|x64.Build.0 = Release|Any CPU
 		{BDCEF3A2-DEED-42A5-9C6B-DE00D07D6F84}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{BDCEF3A2-DEED-42A5-9C6B-DE00D07D6F84}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BDCEF3A2-DEED-42A5-9C6B-DE00D07D6F84}.Debug|x86.ActiveCfg = Debug|Any CPU

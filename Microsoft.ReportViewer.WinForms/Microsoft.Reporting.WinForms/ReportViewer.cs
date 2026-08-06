@@ -2013,7 +2013,7 @@ namespace Microsoft.Reporting.WinForms
             {
                 if (pd != null && loadedDialog != null)
                 {
-                    var setUpPgSetting = loadedDialog.CPageSettings?.GetSetupPageSettings();
+                    var setUpPgSetting = loadedDialog.CPageSettings?.GetPageSettings();
                     if (setUpPgSetting != null)
                     {
                         ApplyPageSettingsToPrintDialog(pd, setUpPgSetting);
@@ -2112,7 +2112,7 @@ namespace Microsoft.Reporting.WinForms
                         ps = new CustomPrintDialog(PrinterSettings, GetPageSettings());
                     }
                     var printerSettings = ps.GetPrinterSettings();
-                    SetPageSettings(ps.CPageSettings.GetSetupPageSettings());
+                    SetPageSettings(ps.CPageSettings.GetPageSettings());
                     if (OnPrintingBegin(this, printerSettings))
                     {
                         string displayNameForUse = Report.DisplayNameForUse;
@@ -2364,7 +2364,7 @@ namespace Microsoft.Reporting.WinForms
         public string CreateEMFDeviceInfo(CustomPageSetting PageSettings, int startPage, int endPage)
         {
             string text = "";
-            PageSettings pageSettings = PageSettings.GetSetupPageSettings();
+            PageSettings pageSettings = PageSettings.GetPageSettings();
             int hundrethsOfInch = pageSettings.Landscape ? pageSettings.PaperSize.Height : pageSettings.PaperSize.Width;
             int hundrethsOfInch2 = pageSettings.Landscape ? pageSettings.PaperSize.Width : pageSettings.PaperSize.Height;
             return string.Format(CultureInfo.InvariantCulture,
@@ -2373,12 +2373,12 @@ namespace Microsoft.Reporting.WinForms
                             <OutputFormat>emf</OutputFormat>
                             <StartPage>{startPage}</StartPage>
                             <EndPage>{endPage}</EndPage>
-                            <MarginTop>{GetMarginValues(pageSettings.Margins.Top, true)}</MarginTop>
-                            <MarginLeft>{GetMarginValues(pageSettings.Margins.Left, true)}</MarginLeft>
-                            <MarginRight>{GetMarginValues(pageSettings.Margins.Right, true)}</MarginRight>
-                            <MarginBottom>{GetMarginValues(pageSettings.Margins.Bottom, true)}</MarginBottom>
-                            <PageHeight>{GetMarginValues(hundrethsOfInch2, false)}</PageHeight>
-                            <PageWidth>{GetMarginValues(hundrethsOfInch, false)}</PageWidth>
+                            <MarginTop>{ToInches(pageSettings.Margins.Top)}</MarginTop>
+                            <MarginLeft>{ToInches(pageSettings.Margins.Left)}</MarginLeft>
+                            <MarginRight>{ToInches(pageSettings.Margins.Right)}</MarginRight>
+                            <MarginBottom>{ToInches(pageSettings.Margins.Bottom)}</MarginBottom>
+                            <PageHeight>{ToInches(hundrethsOfInch2)}</PageHeight>
+                            <PageWidth>{ToInches(hundrethsOfInch)}</PageWidth>
                        </DeviceInfo>"
                        );
         }
@@ -2391,28 +2391,6 @@ namespace Microsoft.Reporting.WinForms
             int hundrethsOfInch2 = pageSettings.Landscape ? pageSettings.PaperSize.Width : pageSettings.PaperSize.Height;
             text = string.Format(CultureInfo.InvariantCulture, "<MarginTop>{0}</MarginTop><MarginLeft>{1}</MarginLeft><MarginRight>{2}</MarginRight><MarginBottom>{3}</MarginBottom><PageHeight>{4}</PageHeight><PageWidth>{5}</PageWidth>", ToInches(pageSettings.Margins.Top), ToInches(pageSettings.Margins.Left), ToInches(pageSettings.Margins.Right), ToInches(pageSettings.Margins.Bottom), ToInches(hundrethsOfInch2), ToInches(hundrethsOfInch));
             return string.Format(CultureInfo.InvariantCulture, "<DeviceInfo><OutputFormat>emf</OutputFormat><StartPage>{0}</StartPage><EndPage>{1}</EndPage>{2}</DeviceInfo>", startPage, endPage, text);
-        }
-
-        private static string GetMarginValues(int value, bool _MetricEnabled)
-        {
-            if (_MetricEnabled)
-            {
-                return ToMiliToInches(value);
-            }
-            else
-            {
-                return ToInches(value);
-            }
-        }
-
-        private static string ToMiliToInches(int tenthsOfMillimeter)
-        {
-            // Convert tenths of a millimeter to millimeters
-            double millimeters = tenthsOfMillimeter / 10.0;
-            // Convert millimeters to inches
-            double inches = millimeters / 25.4;
-            // Return the result as a string with "in" suffix
-            return inches.ToString(CultureInfo.InvariantCulture) + "in";
         }
 
         private static string ToInches(int hundrethsOfInch)
@@ -2627,7 +2605,7 @@ namespace Microsoft.Reporting.WinForms
                         if (ps != null)
                         {
                             pageSetupDialog.PrinterSettings = ps.GetPrinterSettings(); //ps.GetPrinterSettings()
-                            pageSetupDialog.PageSettings = ps.CPageSettings.GetSetupPageSettings();//ps.GetSetupPageSettings()
+                            pageSetupDialog.PageSettings = ps.CPageSettings.GetPageSettings();
                             PrinterSettings = pageSetupDialog.PrinterSettings;
                         }
                         else

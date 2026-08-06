@@ -27,24 +27,19 @@
 
 	<PropertyGroup Label="Signer" Condition="'$(Configuration)'=='Release' AND ('$(DesignTimeBuild)' != 'true' OR '$(BuildingProject)' == 'true')">
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<SigningKeyPath Condition="'$(SigningKeyPath)' == ''">G:\ProjectSigner\frontlook_signature_rider.snk</SigningKeyPath>
 		<SignAssembly>true</SignAssembly>
-		<AssemblyOriginatorKeyFile>G:\ProjectSigner\frontlook_signature_rider.snk</AssemblyOriginatorKeyFile>
+		<AssemblyOriginatorKeyFile>$(SigningKeyPath)</AssemblyOriginatorKeyFile>
 		<PackageOutputPath>G:\ProjectSigner\NugetPush\</PackageOutputPath>
 	</PropertyGroup>
+
+	<Target Name="ValidateReleaseSigningKey" BeforeTargets="Build" Condition="'$(Configuration)'=='Release' AND '$(DesignTimeBuild)' != 'true'">
+		<Error Condition="!Exists('$(SigningKeyPath)')" Text="Release signing key not found at '$(SigningKeyPath)'. Set SigningKeyPath to the signing key file before building." />
+	</Target>
 
 	<ItemGroup>
 		<Content Remove="G:\NugetPackages\.cache\frontlookcorelibraryassembly\8.25.109.13\contentFiles\any\net8.0\FL_HelperFiles\Database\Json\CountriesStatesCities.json" />
 		<Content Remove="G:\NugetPackages\.cache\frontlookcorelibraryassembly\8.25.109.13\contentFiles\any\net8.0\FL_HelperFiles\Database\Json\PinCodeMaster.json" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<None Remove="Report.rdlc" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<Content Include="Report.rdlc">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</Content>
 	</ItemGroup>
 
 	<ItemGroup>
@@ -111,9 +106,6 @@
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
 		<None Update="DemoReport.rdlc">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-		<None Update="TrialBalanceReport.rdlc">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 	</ItemGroup>

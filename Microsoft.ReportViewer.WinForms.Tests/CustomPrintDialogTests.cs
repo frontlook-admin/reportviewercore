@@ -1,4 +1,5 @@
 using System.Drawing;
+using ReportViewerControl = Microsoft.Reporting.WinForms.ReportViewer;
 
 namespace Microsoft.ReportViewer.WinForms.Tests
 {
@@ -226,6 +227,78 @@ namespace Microsoft.ReportViewer.WinForms.Tests
             // Assert
             result.Should().NotBeNull();
             // Method should not throw even with conversion issues
+        }
+
+        [Fact]
+        public void CustomPageSetting_GetSetupMargin_PreservesHundredthsOfAnInch()
+        {
+            // 5 mm is represented by approximately 20 hundredths of an inch.
+            var pageSetting = new CustomPageSetting
+            {
+                Margins = new Margins(20, 20, 20, 20)
+            };
+
+            var result = pageSetting.GetSetupMargin();
+
+            result.Left.Should().Be(20);
+            result.Right.Should().Be(20);
+            result.Top.Should().Be(20);
+            result.Bottom.Should().Be(20);
+        }
+
+        [Fact]
+        public void CustomPageSetting_GetSetupPageSettings_DoesNotConvertMetricMargins()
+        {
+            var pageSetting = new CustomPageSetting
+            {
+                Margins = new Margins(20, 20, 20, 20)
+            };
+
+            var result = pageSetting.GetSetupPageSettings();
+
+            result.Margins.Left.Should().Be(20);
+            result.Margins.Right.Should().Be(20);
+            result.Margins.Top.Should().Be(20);
+            result.Margins.Bottom.Should().Be(20);
+        }
+
+        [Fact]
+        public void CustomPrintDialog_JsonRoundTrip_PreservesMargins()
+        {
+            var original = new CustomPrintDialog
+            {
+                PrintType = PrintType.Mod,
+                CPageSettings = new CustomPageSetting
+                {
+                    Margins = new Margins(20, 0, 20, 20)
+                }
+            };
+
+            var restored = new CustomPrintDialog(original.GetJsonData());
+            var pageSettings = restored.CPageSettings.GetPageSettings();
+
+            pageSettings.Margins.Left.Should().Be(20);
+            pageSettings.Margins.Right.Should().Be(0);
+            pageSettings.Margins.Top.Should().Be(20);
+            pageSettings.Margins.Bottom.Should().Be(20);
+        }
+
+        [Fact]
+        public void ReportViewer_CreateEMFDeviceInfo_UsesHundredthsOfAnInchMargins()
+        {
+            using var reportViewer = new ReportViewerControl();
+            var pageSetting = new CustomPageSetting
+            {
+                PaperSize = new PaperSize("A4", 827, 1169),
+                Margins = new Margins(20, 0, 20, 20)
+            };
+
+            var deviceInfo = reportViewer.CreateEMFDeviceInfo(pageSetting, 0, 0);
+
+            deviceInfo.Should().Contain("<MarginTop>0.2in</MarginTop>");
+            deviceInfo.Should().Contain("<MarginLeft>0.2in</MarginLeft>");
+            deviceInfo.Should().Contain("<MarginRight>0in</MarginRight>");
+            deviceInfo.Should().Contain("<MarginBottom>0.2in</MarginBottom>");
         }
 
         [Fact]

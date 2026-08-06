@@ -39,10 +39,8 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
 
         public bool Color { get; set; }
         public bool Landscape { get; set; }
-        //public bool? MetricEnabled { get; set; }
         public PaperSize PaperSize { get; set; }
-        //private static double MarginConversion = 0.394;
-        private static double MarginConversion = (1 / 2.54);
+        // System.Drawing.Printing.Margins stores all values in hundredths of an inch.
         public Margins Margins { get; set; }
 
         //[JsonIgnore]
@@ -70,56 +68,22 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
 
         public Margins GetSetupMargin()
         {
-            try
+            if (Margins == null)
             {
-                var m = new Margins();
-                var Top = ((double)Margins.Top) / MarginConversion;
-                var Bottom = ((double)Margins.Bottom) / MarginConversion;
-                var Left = ((double)Margins.Left) / MarginConversion;
-                var Right = ((double)Margins.Right) / MarginConversion;
-
-                m.Top = (int)Top;
-                m.Bottom = (int)Bottom;
-                m.Left = (int)Left;
-                m.Right = (int)Right;
-
-                return m;
+                return new Margins();
             }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"CustomPageSetting.GetSetupMargin: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}");
-                return Margins;
-            }
+
+            // PageSetupDialog.EnableMetric only changes the UI unit. The underlying
+            // PageSettings.Margins values remain hundredths of an inch, so preserve
+            // them exactly when rehydrating settings from JSON.
+            return new Margins(Margins.Left, Margins.Right, Margins.Top, Margins.Bottom);
         }
 
         public PageSettings GetSetupPageSettings()
         {
-            try
-            {
-                return new PageSettings()
-                {
-                    Color = Color,
-                    Landscape = Landscape,
-                    PaperSize = PaperSize,
-                    Margins = GetSetupMargin(),
-                    PaperSource = PaperSource,
-                    PrinterResolution = PrinterResolution
-                };
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"CustomPageSetting.GetSetupPageSettings: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}");
-                return new PageSettings()
-                {
-                    Color = Color,
-                    Landscape = Landscape,
-                    PaperSize = PaperSize,
-                    Margins = Margins,
-                    PaperSource = PaperSource,
-                    PrinterResolution = PrinterResolution
-                };
-            }
-
+            // Kept as a compatibility entry point. PageSettings.Margins are always
+            // hundredths of an inch, regardless of the PageSetupDialog display unit.
+            return GetPageSettings();
         }
     }
 
@@ -276,7 +240,7 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
         public virtual PageSettings GetSetupPageSettings()
         {
             GetPrintDialog();
-            return CPageSettings.GetSetupPageSettings();
+            return CPageSettings.GetPageSettings();
         }
 
         /// <summary>
