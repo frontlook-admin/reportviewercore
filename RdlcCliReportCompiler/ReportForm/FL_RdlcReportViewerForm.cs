@@ -199,7 +199,11 @@ namespace CliReportCompiler.ReportForm
         private void ShowPrintSetup()
         {
             var pageSetting = reportViewer.GetPageSettings();
-            reportCompiler.PrintSettings = new CustomPrintDialog(reportViewer.PrinterSettings, pageSetting);
+            if (reportCompiler.PrintSettings == null)
+            {
+                reportCompiler.PrintSettings = new CustomPrintDialog(reportViewer.PrinterSettings, pageSetting);
+            }
+
             reportViewer.CustomPrintDialog = reportCompiler.PrintSettings;
 
             PrinterSettings printerSettings;
@@ -219,8 +223,8 @@ namespace CliReportCompiler.ReportForm
                 return;
             }
 
-            reportViewer.PrinterSettings = printerSettings;
-            reportCompiler.PrintSettings = new CustomPrintDialog(configuredDialog, reportViewer.CurrentReportPageSetting);
+            printerSettings = reportViewer.PrinterSettings;
+            reportCompiler.PrintSettings = reportViewer.CustomPrintDialog ?? new CustomPrintDialog(configuredDialog, reportViewer.CurrentReportPageSetting);
             reportViewer.CustomPrintDialog = reportCompiler.PrintSettings;
 
             if (!string.IsNullOrWhiteSpace(reportCompiler.PrintSettingFilePath))

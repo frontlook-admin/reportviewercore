@@ -190,6 +190,29 @@ namespace Microsoft.ReportViewer.WinForms.Tests
         }
 
         [Fact]
+        public void GetPrintDialog_DoesNotReplaceExactMetricMargins()
+        {
+            var dialog = new CustomPrintDialog(new PrinterSettings(), new PageSettings())
+            {
+                CPageSettings = new CustomPageSetting
+                {
+                    PaperSize = new PaperSize("A4", 827, 1169),
+                    Margins = new Margins(20, 20, 20, 20),
+                    LeftMarginMillimeters = 5.01m,
+                    RightMarginMillimeters = 5.01m,
+                    TopMarginMillimeters = 5.01m,
+                    BottomMarginMillimeters = 5.01m
+                }
+            };
+
+            using (dialog.GetPrintDialog())
+            {
+                dialog.CPageSettings.LeftMarginMillimeters.Should().Be(5.01m);
+                dialog.CPageSettings.GetPageSettings().Margins.Left.Should().Be(20);
+            }
+        }
+
+        [Fact]
         public void Properties_CanBeSetAndRetrieved()
         {
             // Arrange
@@ -284,6 +307,55 @@ namespace Microsoft.ReportViewer.WinForms.Tests
         }
 
         [Fact]
+        public void CustomPageSetting_ExactMetricMargins_RoundOnlyForPageSettings()
+        {
+            var pageSetting = new CustomPageSetting
+            {
+                Margins = new Margins(20, 20, 20, 20),
+                LeftMarginMillimeters = 5.00m,
+                RightMarginMillimeters = 5.00m,
+                TopMarginMillimeters = 5.00m,
+                BottomMarginMillimeters = 5.00m
+            };
+
+            var pageSettings = pageSetting.GetPageSettings();
+
+            pageSetting.LeftMarginMillimeters.Should().Be(5.00m);
+            pageSetting.RightMarginMillimeters.Should().Be(5.00m);
+            pageSetting.TopMarginMillimeters.Should().Be(5.00m);
+            pageSetting.BottomMarginMillimeters.Should().Be(5.00m);
+            pageSettings.Margins.Left.Should().Be(20);
+            pageSettings.Margins.Right.Should().Be(20);
+            pageSettings.Margins.Top.Should().Be(20);
+            pageSettings.Margins.Bottom.Should().Be(20);
+        }
+
+        [Fact]
+        public void CustomPrintDialog_JsonRoundTrip_PreservesExactMetricMargins()
+        {
+            var original = new CustomPrintDialog
+            {
+                PrintType = PrintType.Mod,
+                CPageSettings = new CustomPageSetting
+                {
+                    Margins = new Margins(20, 0, 20, 20),
+                    LeftMarginMillimeters = 5.00m,
+                    RightMarginMillimeters = 0.00m,
+                    TopMarginMillimeters = 5.00m,
+                    BottomMarginMillimeters = 5.00m
+                }
+            };
+
+            var restored = new CustomPrintDialog(original.GetJsonData());
+
+            restored.CPageSettings.LeftMarginMillimeters.Should().Be(5.00m);
+            restored.CPageSettings.RightMarginMillimeters.Should().Be(0.00m);
+            restored.CPageSettings.TopMarginMillimeters.Should().Be(5.00m);
+            restored.CPageSettings.BottomMarginMillimeters.Should().Be(5.00m);
+            restored.CPageSettings.GetPageSettings().Margins.Left.Should().Be(20);
+        }
+
+        [Fact]
         public void ReportViewer_CreateEMFDeviceInfo_UsesHundredthsOfAnInchMargins()
         {
             using var reportViewer = new ReportViewerControl();
@@ -299,6 +371,29 @@ namespace Microsoft.ReportViewer.WinForms.Tests
             deviceInfo.Should().Contain("<MarginLeft>0.2in</MarginLeft>");
             deviceInfo.Should().Contain("<MarginRight>0in</MarginRight>");
             deviceInfo.Should().Contain("<MarginBottom>0.2in</MarginBottom>");
+        }
+
+        [Fact]
+        public void ReportViewer_CreateEMFDeviceInfo_UsesExactMetricMarginsForRendering()
+        {
+            using var reportViewer = new ReportViewerControl();
+            var pageSetting = new CustomPageSetting
+            {
+                PaperSize = new PaperSize("A4", 827, 1169),
+                Margins = new Margins(20, 0, 20, 20),
+                LeftMarginMillimeters = 5.00m,
+                RightMarginMillimeters = 0.00m,
+                TopMarginMillimeters = 5.00m,
+                BottomMarginMillimeters = 5.00m
+            };
+
+            var deviceInfo = reportViewer.CreateEMFDeviceInfo(pageSetting, 0, 0);
+
+            deviceInfo.Should().Contain("<MarginTop>0.1968503937007874015748031496in</MarginTop>");
+            deviceInfo.Should().Contain("<MarginLeft>0.1968503937007874015748031496in</MarginLeft>");
+            deviceInfo.Should().Contain("<MarginRight>0in</MarginRight>");
+            deviceInfo.Should().Contain("<MarginBottom>0.1968503937007874015748031496in</MarginBottom>");
+            pageSetting.GetPageSettings().Margins.Left.Should().Be(20);
         }
 
         [Fact]

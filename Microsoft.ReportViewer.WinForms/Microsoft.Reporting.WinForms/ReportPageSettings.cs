@@ -12,6 +12,18 @@ namespace Microsoft.Reporting.WinForms
 
 		private Margins m_margins;
 
+		private double m_pageWidthMillimeters;
+
+		private double m_pageHeightMillimeters;
+
+		private double m_leftMarginMillimeters;
+
+		private double m_rightMarginMillimeters;
+
+		private double m_topMarginMillimeters;
+
+		private double m_bottomMarginMillimeters;
+
 		public PaperSize PaperSize
 		{
 			get
@@ -23,6 +35,18 @@ namespace Microsoft.Reporting.WinForms
 		}
 
 		public Margins Margins => (Margins)m_margins.Clone();
+
+		internal double PageWidthMillimeters => m_pageWidthMillimeters;
+
+		internal double PageHeightMillimeters => m_pageHeightMillimeters;
+
+		internal double LeftMarginMillimeters => m_leftMarginMillimeters;
+
+		internal double RightMarginMillimeters => m_rightMarginMillimeters;
+
+		internal double TopMarginMillimeters => m_topMarginMillimeters;
+
+		internal double BottomMarginMillimeters => m_bottomMarginMillimeters;
 
 		public bool IsLandscape => m_pageWidth > m_pageHeight;
 
@@ -42,6 +66,12 @@ namespace Microsoft.Reporting.WinForms
 
 		internal ReportPageSettings(double pageHeight, double pageWidth, double leftMargin, double rightMargin, double topMargin, double bottomMargin)
 		{
+			m_pageWidthMillimeters = pageWidth;
+			m_pageHeightMillimeters = pageHeight;
+			m_leftMarginMillimeters = leftMargin;
+			m_rightMarginMillimeters = rightMargin;
+			m_topMarginMillimeters = topMargin;
+			m_bottomMarginMillimeters = bottomMargin;
 			m_pageWidth = ConvertMmTo100thInch(pageWidth);
 			m_pageHeight = ConvertMmTo100thInch(pageHeight);
 			m_margins = new Margins(ConvertMmTo100thInch(leftMargin), ConvertMmTo100thInch(rightMargin), ConvertMmTo100thInch(topMargin), ConvertMmTo100thInch(bottomMargin));

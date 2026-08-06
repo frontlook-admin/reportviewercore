@@ -107,6 +107,8 @@ namespace Microsoft.Reporting.WinForms
 
         private ReportHierarchy m_reportHierarchy = new ReportHierarchy();
 
+        private ReportPageSettings m_reportPageSettings;
+
         private IReportViewerMessages m_reportViewerMessages;
 
         private Queue<MethodInvoker> m_pendingAsyncInvokes = new Queue<MethodInvoker>();
@@ -689,6 +691,7 @@ namespace Microsoft.Reporting.WinForms
             get => CurrentReport.PageSettings;
             set
             {
+                m_reportPageSettings = null;
                 CurrentReport.PageSettings = value;
             }
         }
@@ -1935,6 +1938,11 @@ namespace Microsoft.Reporting.WinForms
                 }
             }
 
+            if (CustomPrintDialog != null)
+            {
+                return CustomPrintDialog;
+            }
+
             // Fallback to default settings
             var pageSetting = GetPageSettings();
             return new CustomPrintDialog(PrinterSettings, pageSetting);
@@ -2009,7 +2017,7 @@ namespace Microsoft.Reporting.WinForms
         {
             CustomPrintDialog loadedDialog = LoadPrinterSettingsFromFile();
 
-            using (var pd = loadedDialog?.GetPrintDialog())
+            using (var pd = loadedDialog?.GetPrintDialogSettings().CreatePrintDialog())
             {
                 if (pd != null && loadedDialog != null)
                 {
@@ -2051,7 +2059,7 @@ namespace Microsoft.Reporting.WinForms
 
                 PrinterSettings configuredSettings;
 
-                using (var pd = printSettings?.GetPrintDialog())
+                using (var pd = printSettings.GetPrintDialogSettings().CreatePrintDialog())
                 {
                     if (pd == null)
                     {
@@ -2258,10 +2266,12 @@ namespace Microsoft.Reporting.WinForms
             PageSettings pageSettings = null;
             try
             {
-                pageSettings = Report.GetDefaultPageSettings().ToPageSettings(PrinterSettings);
+                m_reportPageSettings = Report.GetDefaultPageSettings();
+                pageSettings = m_reportPageSettings.ToPageSettings(PrinterSettings);
             }
             catch (MissingReportSourceException)
             {
+                m_reportPageSettings = null;
                 pageSettings = null;
             }
             m_reportHierarchy.Peek().PageSettings = pageSettings;
@@ -2365,6 +2375,7 @@ namespace Microsoft.Reporting.WinForms
         {
             string text = "";
             PageSettings pageSettings = PageSettings.GetPageSettings();
+            PageSettings.GetMetricMargins(out var leftMarginMillimeters, out var rightMarginMillimeters, out var topMarginMillimeters, out var bottomMarginMillimeters);
             int hundrethsOfInch = pageSettings.Landscape ? pageSettings.PaperSize.Height : pageSettings.PaperSize.Width;
             int hundrethsOfInch2 = pageSettings.Landscape ? pageSettings.PaperSize.Width : pageSettings.PaperSize.Height;
             return string.Format(CultureInfo.InvariantCulture,
@@ -2373,10 +2384,10 @@ namespace Microsoft.Reporting.WinForms
                             <OutputFormat>emf</OutputFormat>
                             <StartPage>{startPage}</StartPage>
                             <EndPage>{endPage}</EndPage>
-                            <MarginTop>{ToInches(pageSettings.Margins.Top)}</MarginTop>
-                            <MarginLeft>{ToInches(pageSettings.Margins.Left)}</MarginLeft>
-                            <MarginRight>{ToInches(pageSettings.Margins.Right)}</MarginRight>
-                            <MarginBottom>{ToInches(pageSettings.Margins.Bottom)}</MarginBottom>
+                            <MarginTop>{ToInches(topMarginMillimeters)}</MarginTop>
+                            <MarginLeft>{ToInches(leftMarginMillimeters)}</MarginLeft>
+                            <MarginRight>{ToInches(rightMarginMillimeters)}</MarginRight>
+                            <MarginBottom>{ToInches(bottomMarginMillimeters)}</MarginBottom>
                             <PageHeight>{ToInches(hundrethsOfInch2)}</PageHeight>
                             <PageWidth>{ToInches(hundrethsOfInch)}</PageWidth>
                        </DeviceInfo>"
@@ -2385,6 +2396,16 @@ namespace Microsoft.Reporting.WinForms
 
         private string CreateEMFDeviceInfo(int startPage, int endPage)
         {
+            if (CustomPrintDialog?.CPageSettings != null)
+            {
+                return CreateEMFDeviceInfo(CustomPrintDialog.CPageSettings, startPage, endPage);
+            }
+
+            if (m_reportPageSettings != null)
+            {
+                return CreateEMFDeviceInfo(m_reportPageSettings, startPage, endPage);
+            }
+
             string text = "";
             PageSettings pageSettings = PageSettings;
             int hundrethsOfInch = pageSettings.Landscape ? pageSettings.PaperSize.Height : pageSettings.PaperSize.Width;
@@ -2393,9 +2414,46 @@ namespace Microsoft.Reporting.WinForms
             return string.Format(CultureInfo.InvariantCulture, "<DeviceInfo><OutputFormat>emf</OutputFormat><StartPage>{0}</StartPage><EndPage>{1}</EndPage>{2}</DeviceInfo>", startPage, endPage, text);
         }
 
+        private string CreateEMFDeviceInfo(ReportPageSettings reportPageSettings, int startPage, int endPage)
+        {
+            return string.Format(CultureInfo.InvariantCulture,
+                $@"
+                        <DeviceInfo>
+                            <OutputFormat>emf</OutputFormat>
+                            <StartPage>{startPage}</StartPage>
+                            <EndPage>{endPage}</EndPage>
+                            <MarginTop>{ToInches(reportPageSettings.TopMarginMillimeters)}</MarginTop>
+                            <MarginLeft>{ToInches(reportPageSettings.LeftMarginMillimeters)}</MarginLeft>
+                            <MarginRight>{ToInches(reportPageSettings.RightMarginMillimeters)}</MarginRight>
+                            <MarginBottom>{ToInches(reportPageSettings.BottomMarginMillimeters)}</MarginBottom>
+                            <PageHeight>{ToInches(reportPageSettings.PageHeightMillimeters)}</PageHeight>
+                            <PageWidth>{ToInches(reportPageSettings.PageWidthMillimeters)}</PageWidth>
+                       </DeviceInfo>");
+        }
+
         private static string ToInches(int hundrethsOfInch)
         {
             return ((double)hundrethsOfInch / 100.0).ToString(CultureInfo.InvariantCulture) + "in";
+        }
+
+        private static string ToInches(decimal millimeters)
+        {
+            if (millimeters == 0m)
+            {
+                return "0in";
+            }
+
+            return (millimeters / 25.4m).ToString(CultureInfo.InvariantCulture) + "in";
+        }
+
+        private static string ToInches(double millimeters)
+        {
+            if (millimeters == 0d)
+            {
+                return "0in";
+            }
+
+            return (millimeters / 25.4d).ToString("R", CultureInfo.InvariantCulture) + "in";
         }
 
         private Stream CreateStreamEMF(string name, string extension, Encoding encoding, string mimeType, bool useChunking, StreamOper operation)
@@ -2574,81 +2632,77 @@ namespace Microsoft.Reporting.WinForms
 
         public DialogResult PageSetupDialog()
         {
-
-
             if (!PrinterSettings.IsValid)
             {
                 DisplayErrorMsgBox(new InvalidPrinterException(new PrinterSettings()), LocalizationHelper.Current.MessageBoxTitle);
                 return DialogResult.Abort;
             }
-            using (PageSetupDialog pageSetupDialog = new PageSetupDialog())
+            var previousPageSettings = (PageSettings)PageSettings.Clone();
+            var storedPrintSettings = LoadPrinterSettingsFromFile();
+            var customPageSetting = storedPrintSettings?.CPageSettings?.Clone() ?? new CustomPageSetting(previousPageSettings);
+            var printerSettings = PrinterSettings;
+
+            try
             {
-
-
-                pageSetupDialog.AllowPrinter = true;
-                pageSetupDialog.EnableMetric = true;
-
-                if (!string.IsNullOrEmpty(PrintSettingFilePath))
+                if (storedPrintSettings != null)
                 {
-                    //if file not exists then create folder and file
-                    if (!File.Exists(PrintSettingFilePath))
-                    {
-                        //check folder exists or not
-                        if (!Directory.Exists(Path.GetDirectoryName(PrintSettingFilePath))) Directory.CreateDirectory(Path.GetDirectoryName(PrintSettingFilePath));
-
-                        File.WriteAllText(PrintSettingFilePath, new CustomPrintDialog(PrinterSettings, PageSettings).FL_CastToJson());
-                    }
-                    if (!string.IsNullOrEmpty(File.ReadAllText(PrintSettingFilePath)))
-                    {
-
-                        var ps = File.ReadAllText(PrintSettingFilePath).FL_CastToClass<CustomPrintDialog>();
-                        if (ps != null)
-                        {
-                            pageSetupDialog.PrinterSettings = ps.GetPrinterSettings(); //ps.GetPrinterSettings()
-                            pageSetupDialog.PageSettings = ps.CPageSettings.GetPageSettings();
-                            PrinterSettings = pageSetupDialog.PrinterSettings;
-                        }
-                        else
-                        {
-                            pageSetupDialog.PrinterSettings = PrinterSettings;
-                            pageSetupDialog.PageSettings = (PageSettings)PageSettings.Clone();
-                        }
-                    }
-                    else
-                    {
-                        //set default print settings
-                        pageSetupDialog.PrinterSettings = PrinterSettings;
-                        pageSetupDialog.PageSettings = (PageSettings)PageSettings.Clone();
-                    }
+                    printerSettings = storedPrintSettings.GetPrinterSettings();
                 }
-                else
-                {
-                    pageSetupDialog.PrinterSettings = PrinterSettings;
-                    pageSetupDialog.PageSettings = (PageSettings)PageSettings.Clone();
-                }
-
-                DialogResult num = pageSetupDialog.ShowDialog(this);
-                if (num == DialogResult.OK)
-                {
-                    bool num2 = pageSetupDialog.PageSettings.Margins != PageSettings.Margins || pageSetupDialog.PageSettings.Bounds != PageSettings.Bounds;
-                    CurrentReportPageSetting = pageSetupDialog.PageSettings;
-                    MetricEnabled = pageSetupDialog.EnableMetric;
-                    PrinterSettings = pageSetupDialog.PrinterSettings;
-                    if (num2)
-                    {
-                        if (this.PageSettingsChanged != null)
-                        {
-                            this.PageSettingsChanged(this, EventArgs.Empty);
-                        }
-                        CurrentReport.FileManager.Clean();
-                        if (m_viewMode == DisplayMode.PrintLayout)
-                        {
-                            RenderForPreview(new PostRenderArgs(isDifferentReport: true, isPartialRendering: false), invalidateCache: false);
-                        }
-                    }
-                }
-                return num;
             }
+            catch (Exception exception)
+            {
+                Debug.WriteLine($"PageSetupDialog: Could not load stored printer settings: {exception.GetType().Name} - {exception.Message}");
+            }
+
+            using var pageSetupDialog = new CustomPageSetupDialog(printerSettings, customPageSetting);
+            var result = pageSetupDialog.ShowDialog(this);
+            if (result != DialogResult.OK)
+            {
+                return result;
+            }
+
+            var selectedPageSettings = pageSetupDialog.PageSetting.GetPageSettings();
+            var pageSettingsChanged = ArePageSettingsDifferent(previousPageSettings, selectedPageSettings);
+
+            CurrentReportPageSetting = selectedPageSettings;
+            MetricEnabled = true;
+            PrinterSettings = pageSetupDialog.PrinterSettings;
+            UpdateCustomPrintDialog(pageSetupDialog.PageSetting);
+
+            if (pageSettingsChanged)
+            {
+                PageSettingsChanged?.Invoke(this, EventArgs.Empty);
+                CurrentReport.FileManager.Clean();
+                if (m_viewMode == DisplayMode.PrintLayout)
+                {
+                    RenderForPreview(new PostRenderArgs(isDifferentReport: true, isPartialRendering: false), invalidateCache: false);
+                }
+            }
+
+            SavePrintSetting();
+            return result;
+        }
+
+        private void UpdateCustomPrintDialog(CustomPageSetting pageSetting)
+        {
+            var printDialog = CustomPrintDialog ?? new CustomPrintDialog(PrinterSettings, pageSetting.GetPageSettings());
+            printDialog.PrinterName = PrinterSettings.PrinterName;
+            printDialog.Copies = PrinterSettings.Copies;
+            printDialog.Collate = PrinterSettings.Collate;
+            printDialog.PrintRange = PrinterSettings.PrintRange;
+            printDialog.PaperSize = pageSetting.PaperSize;
+            printDialog.Landscape = pageSetting.Landscape;
+            printDialog.CPageSettings = pageSetting.Clone();
+            CustomPrintDialog = printDialog;
+        }
+
+        private static bool ArePageSettingsDifferent(PageSettings first, PageSettings second)
+        {
+            return first.Margins.Left != second.Margins.Left ||
+                   first.Margins.Right != second.Margins.Right ||
+                   first.Margins.Top != second.Margins.Top ||
+                   first.Margins.Bottom != second.Margins.Bottom ||
+                   first.Bounds != second.Bounds;
         }
 
         private void CancelAutoRefreshTimer()

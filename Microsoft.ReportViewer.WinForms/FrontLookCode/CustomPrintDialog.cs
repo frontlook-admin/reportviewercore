@@ -1,15 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Drawing.Printing;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using FrontLookCoreLibraryAssembly.FL_General;
 using System.Windows.Forms;
-using System.IO;
 using Microsoft.Reporting.WinForms;
-using System.Text.Json.Serialization;
 using Microsoft.ReportViewer.Common.FrontLookCode;
 
 namespace Microsoft.ReportViewer.WinForms.FrontLookCode
@@ -35,6 +28,7 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
             PaperSource = pageSettings.PaperSource;
             PrinterResolution = pageSettings.PrinterResolution;
             PaperSize = pageSettings.PaperSize;
+            SetMetricMarginsFromPageSettings(pageSettings);
         }
 
         public bool Color { get; set; }
@@ -42,6 +36,13 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
         public PaperSize PaperSize { get; set; }
         // System.Drawing.Printing.Margins stores all values in hundredths of an inch.
         public Margins Margins { get; set; }
+
+        // Preserve exact metric values entered by the user. PageSettings.Margins
+        // remains the rounded hundredths-of-an-inch representation used by GDI.
+        public decimal? LeftMarginMillimeters { get; set; }
+        public decimal? RightMarginMillimeters { get; set; }
+        public decimal? TopMarginMillimeters { get; set; }
+        public decimal? BottomMarginMillimeters { get; set; }
 
         //[JsonIgnore]
         //public Margins ReportMargins => GetSetupMargin();
@@ -59,7 +60,7 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
                 Color = Color,
                 Landscape = Landscape,
                 PaperSize = PaperSize,
-                Margins = Margins,
+                Margins = GetPageMargins(),
                 PaperSource = PaperSource,
                 PrinterResolution = PrinterResolution
             };
@@ -68,15 +69,7 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
 
         public Margins GetSetupMargin()
         {
-            if (Margins == null)
-            {
-                return new Margins();
-            }
-
-            // PageSetupDialog.EnableMetric only changes the UI unit. The underlying
-            // PageSettings.Margins values remain hundredths of an inch, so preserve
-            // them exactly when rehydrating settings from JSON.
-            return new Margins(Margins.Left, Margins.Right, Margins.Top, Margins.Bottom);
+            return GetPageMargins();
         }
 
         public PageSettings GetSetupPageSettings()
@@ -84,6 +77,94 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
             // Kept as a compatibility entry point. PageSettings.Margins are always
             // hundredths of an inch, regardless of the PageSetupDialog display unit.
             return GetPageSettings();
+        }
+
+        public CustomPageSetting Clone()
+        {
+            return new CustomPageSetting
+            {
+                Color = Color,
+                Landscape = Landscape,
+                PaperSize = PaperSize,
+                Margins = Margins == null ? null : new Margins(Margins.Left, Margins.Right, Margins.Top, Margins.Bottom),
+                LeftMarginMillimeters = LeftMarginMillimeters,
+                RightMarginMillimeters = RightMarginMillimeters,
+                TopMarginMillimeters = TopMarginMillimeters,
+                BottomMarginMillimeters = BottomMarginMillimeters,
+                PaperSource = PaperSource,
+                PrinterResolution = PrinterResolution
+            };
+        }
+
+        internal void SetMetricMarginsFromPageSettings(PageSettings pageSettings)
+        {
+            if (pageSettings?.Margins == null)
+            {
+                return;
+            }
+
+            LeftMarginMillimeters = HundredthsOfAnInchToMillimeters(pageSettings.Margins.Left);
+            RightMarginMillimeters = HundredthsOfAnInchToMillimeters(pageSettings.Margins.Right);
+            TopMarginMillimeters = HundredthsOfAnInchToMillimeters(pageSettings.Margins.Top);
+            BottomMarginMillimeters = HundredthsOfAnInchToMillimeters(pageSettings.Margins.Bottom);
+        }
+
+        internal void SetMetricMargins(decimal left, decimal right, decimal top, decimal bottom)
+        {
+            LeftMarginMillimeters = ValidateMetricMargin(left, nameof(left));
+            RightMarginMillimeters = ValidateMetricMargin(right, nameof(right));
+            TopMarginMillimeters = ValidateMetricMargin(top, nameof(top));
+            BottomMarginMillimeters = ValidateMetricMargin(bottom, nameof(bottom));
+        }
+
+        internal void GetMetricMargins(out decimal left, out decimal right, out decimal top, out decimal bottom)
+        {
+            var sourceMargins = Margins ?? new Margins();
+            left = LeftMarginMillimeters ?? HundredthsOfAnInchToMillimeters(sourceMargins.Left);
+            right = RightMarginMillimeters ?? HundredthsOfAnInchToMillimeters(sourceMargins.Right);
+            top = TopMarginMillimeters ?? HundredthsOfAnInchToMillimeters(sourceMargins.Top);
+            bottom = BottomMarginMillimeters ?? HundredthsOfAnInchToMillimeters(sourceMargins.Bottom);
+        }
+
+        private Margins GetPageMargins()
+        {
+            GetMetricMargins(out var left, out var right, out var top, out var bottom);
+            return new Margins(
+                MillimetersToHundredthsOfAnInch(left),
+                MillimetersToHundredthsOfAnInch(right),
+                MillimetersToHundredthsOfAnInch(top),
+                MillimetersToHundredthsOfAnInch(bottom));
+        }
+
+        private static decimal ValidateMetricMargin(decimal value, string parameterName)
+        {
+            if (value < 0m)
+            {
+                throw new ArgumentOutOfRangeException(parameterName, "Margins cannot be negative.");
+            }
+
+            return value;
+        }
+
+        private static decimal HundredthsOfAnInchToMillimeters(int value)
+        {
+            return value * 25.4m / 100m;
+        }
+
+        private static int MillimetersToHundredthsOfAnInch(decimal value)
+        {
+            if (value < 0m)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), "Margins cannot be negative.");
+            }
+
+            var hundredthsOfAnInch = value / 25.4m * 100m;
+            if (hundredthsOfAnInch > int.MaxValue)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), "Margin is too large.");
+            }
+
+            return checked((int)Math.Round(hundredthsOfAnInch, 0, MidpointRounding.AwayFromZero));
         }
     }
 
@@ -230,16 +311,15 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
 
         public virtual PrinterSettings GetPrinterSettings()
         {
-            return GetPrintDialog().PrinterSettings;
+            using var printDialog = GetPrintDialogSettings().CreatePrintDialog();
+            return printDialog.PrinterSettings;
         }
         public virtual PageSettings GetPageSettings()
         {
-            GetPrintDialog();
             return CPageSettings.GetPageSettings();
         }
         public virtual PageSettings GetSetupPageSettings()
         {
-            GetPrintDialog();
             return CPageSettings.GetPageSettings();
         }
 
@@ -277,95 +357,7 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
         [Obsolete("Use GetPrintDialogSettings() instead. This method creates undisposed resources.", false)]
         public virtual PrintDialog GetPrintDialog()
         {
-            var pd = new PrintDialog();
-            try
-            {
-                pd.PrinterSettings.PrinterName = PrinterName;
-                pd.AllowSomePages = AllowSomePages;
-                pd.AllowSelection = AllowSelection;
-                pd.AllowPrintToFile = AllowPrintToFile;
-                pd.UseEXDialog = UseEXDialog;
-                pd.ShowNetwork = ShowNetwork;
-                pd.PrinterSettings.PrintRange = PrintRange;
-                pd.PrinterSettings.Copies = (short)Copies;
-                pd.PrinterSettings.Collate = Collate;
-                if (PrintType == PrintType.Default)
-                {
-                    if (PaperSize == null)
-                    {
-                        PaperSize = new PaperSize("A4", 827, 1169);
-                    }
-                    //pd.PrinterSettings.PaperSizes.Add(PaperSize);
-                    //check if papersize exists
-                    if (pd.PrinterSettings.PaperSizes.Cast<PaperSize>().Where(x => x.PaperName == PaperSize.PaperName).Count() == 0)
-                    {
-                        pd.PrinterSettings.PaperSizes.Add(PaperSize);
-                    }
-                    pd.PrinterSettings.DefaultPageSettings.PaperSize = PaperSize;
-                    pd.PrinterSettings.DefaultPageSettings.Landscape = Landscape;
-
-                    CPageSettings = new CustomPageSetting(pd.PrinterSettings.DefaultPageSettings);
-                }
-                else
-                {
-                    if (CPageSettings == null)
-                    {
-
-                        if (PaperSize == null)
-                        {
-                            PaperSize = new PaperSize("A4", 827, 1169);
-                        }
-                        //pd.PrinterSettings.PaperSizes.Add(PaperSize);
-                        //check if papersize exists
-                        if (pd.PrinterSettings.PaperSizes.Cast<PaperSize>().Where(x => x.PaperName == PaperSize.PaperName).Count() == 0)
-                        {
-                            pd.PrinterSettings.PaperSizes.Add(PaperSize);
-                        }
-                        pd.PrinterSettings.DefaultPageSettings.PaperSize = PaperSize;
-                        pd.PrinterSettings.DefaultPageSettings.Landscape = Landscape;
-
-                        CPageSettings = new CustomPageSetting(pd.PrinterSettings.DefaultPageSettings);
-                    }
-                    else
-                    {
-
-                        if (CPageSettings.PaperSize == null)
-                        {
-                            CPageSettings.PaperSize = new PaperSize("A4", 827, 1169);
-                            PaperSize = CPageSettings.PaperSize;
-                        }
-
-                        var pagest = CPageSettings.GetPageSettings();
-
-                        //pd.PrinterSettings.PaperSizes.Add(PaperSize);
-                        //check if papersize exists
-                        if (pd.PrinterSettings.PaperSizes.Cast<PaperSize>().Where(x => x == pagest.PaperSize).Count() == 0)
-                        {
-                            pd.PrinterSettings.PaperSizes.Add(PaperSize);
-                        }
-                        pd.PrinterSettings.DefaultPageSettings.PaperSize = pagest.PaperSize;
-                        pd.PrinterSettings.DefaultPageSettings.Landscape = pagest.Landscape;
-
-                        CPageSettings = new CustomPageSetting(pagest);
-                    }
-                }
-
-
-
-                return pd;
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"CustomPrintDialog.GetPrintDialog: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}");
-                var pf = new PrintDialog();
-
-                pf.AllowSomePages = true;
-                pf.AllowSelection = true;
-                pf.ShowNetwork = true;
-                pf.AllowPrintToFile = true;
-                pf.UseEXDialog = false;
-                return pf;
-            }
+            return GetPrintDialogSettings().CreatePrintDialog();
         }
     }
 }
