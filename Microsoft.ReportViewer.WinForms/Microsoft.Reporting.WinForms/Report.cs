@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Microsoft.Reporting.WinForms
@@ -133,9 +135,115 @@ namespace Microsoft.Reporting.WinForms
 			return GetTotalPages(out pageCountMode);
 		}
 
-        public async Task<byte[]> RenderAsync(string format)
+        public Task<byte[]> RenderAsync(string format)
 		{
-			return await Task.Run(() => Render(format)).ConfigureAwait(false);
+			return RenderAsync(format, null, PageCountMode.Estimate, CancellationToken.None, null);
+		}
+
+		public Task<byte[]> RenderAsync(string format, CancellationToken cancellationToken)
+		{
+			return RenderAsync(format, null, PageCountMode.Estimate, cancellationToken, null);
+		}
+
+		public async Task<byte[]> RenderAsync(string format, string deviceInfo, PageCountMode pageCountMode, CancellationToken cancellationToken = default, IProgress<ReportRenderProgress> progress = null)
+		{
+			if (format == null)
+			{
+				throw new ArgumentNullException(nameof(format));
+			}
+
+			var stopwatch = Stopwatch.StartNew();
+			cancellationToken.ThrowIfCancellationRequested();
+			ReportProgress(progress, new ReportRenderProgress(ReportRenderStage.Started, format, stopwatch.Elapsed, null, null, "Report rendering started."));
+
+			using (cancellationToken.Register(CancelRender))
+			{
+				try
+				{
+					ReportProgress(progress, new ReportRenderProgress(ReportRenderStage.Rendering, format, stopwatch.Elapsed, null, null, "Report rendering is in progress."));
+					byte[] result = await Task.Run(() =>
+					{
+						cancellationToken.ThrowIfCancellationRequested();
+						string mimeType;
+						string encoding;
+						string fileNameExtension;
+						string[] streams;
+						Warning[] warnings;
+						return Render(format, deviceInfo, pageCountMode, out mimeType, out encoding, out fileNameExtension, out streams, out warnings);
+					}, CancellationToken.None).ConfigureAwait(false);
+
+					cancellationToken.ThrowIfCancellationRequested();
+					ReportProgress(progress, new ReportRenderProgress(ReportRenderStage.Completed, format, stopwatch.Elapsed, result?.LongLength ?? 0L, null, "Report rendering completed."));
+					return result;
+				}
+				catch (OperationCanceledException ex)
+				{
+					ReportProgress(progress, new ReportRenderProgress(ReportRenderStage.Cancelled, format, stopwatch.Elapsed, null, ex, "Report rendering was cancelled."));
+					throw;
+				}
+				catch (Exception ex) when (cancellationToken.IsCancellationRequested)
+				{
+					var cancellation = new OperationCanceledException("Report rendering was cancelled.", ex, cancellationToken);
+					ReportProgress(progress, new ReportRenderProgress(ReportRenderStage.Cancelled, format, stopwatch.Elapsed, null, cancellation, "Report rendering was cancelled."));
+					throw cancellation;
+				}
+				catch (Exception ex)
+				{
+					ReportProgress(progress, new ReportRenderProgress(ReportRenderStage.Failed, format, stopwatch.Elapsed, null, ex, "Report rendering failed."));
+					throw;
+				}
+				finally
+				{
+					ClearCancelState();
+				}
+			}
+		}
+
+		private void CancelRender()
+		{
+			try
+			{
+				if (CanSelfCancel)
+				{
+					SetCancelState(shouldCancel: true);
+				}
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine($"Report.RenderAsync cancellation: {ex.GetType().Name} - {ex.Message}");
+			}
+		}
+
+		private void ClearCancelState()
+		{
+			try
+			{
+				if (CanSelfCancel)
+				{
+					SetCancelState(shouldCancel: false);
+				}
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine($"Report.RenderAsync clear cancellation: {ex.GetType().Name} - {ex.Message}");
+			}
+		}
+
+		private static void ReportProgress(IProgress<ReportRenderProgress> progress, ReportRenderProgress value)
+		{
+			if (progress == null)
+			{
+				return;
+			}
+
+			try
+			{
+				progress.Report(value);
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine($"Report.RenderAsync progress callback: {ex.GetType().Name} - {ex.Message}");
+			}
 		}
 
 		public byte[] Render(string format)

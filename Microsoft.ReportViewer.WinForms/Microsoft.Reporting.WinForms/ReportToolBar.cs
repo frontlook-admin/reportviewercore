@@ -119,6 +119,8 @@ namespace Microsoft.Reporting.WinForms
         public ReportToolBar()
         {
             InitializeComponent();
+            ConfigureModernLayout();
+            export.DropDownOpening += OnExportDropDownOpening;
             using (Bitmap image = new Bitmap(1, 1))
             {
                 using (Graphics graphics = Graphics.FromImage(image))
@@ -162,6 +164,8 @@ namespace Microsoft.Reporting.WinForms
             PrintDialog.ToolTipText = LocalizationHelper.Current.PrintButtonToolTip;
             printPreview.ToolTipText = LocalizationHelper.Current.PrintLayoutButtonToolTip;
             pageSetup.ToolTipText = LocalizationHelper.Current.PageSetupButtonToolTip;
+            DirectPrint.ToolTipText = LocalizationHelper.Current.PrintButtonToolTip;
+            printerPageSettings.ToolTipText = LocalizationHelper.Current.PageSetupButtonToolTip;
             export.ToolTipText = LocalizationHelper.Current.ExportButtonToolTip;
             zoom.ToolTipText = LocalizationHelper.Current.ZoomControlToolTip;
             textToFind.ToolTipText = LocalizationHelper.Current.SearchTextBoxToolTip;
@@ -169,6 +173,8 @@ namespace Microsoft.Reporting.WinForms
             find.ToolTipText = LocalizationHelper.Current.FindButtonToolTip;
             findNext.Text = LocalizationHelper.Current.FindNextButtonText;
             findNext.ToolTipText = LocalizationHelper.Current.FindNextButtonToolTip;
+            DirectPrint.AccessibleName = ReportPreviewStrings.PrintAccessibleName;
+            printerPageSettings.AccessibleName = ReportPreviewStrings.PageSetupAccessibleName;
         }
 
         private void ApplyLocalizedResources()
@@ -241,6 +247,8 @@ namespace Microsoft.Reporting.WinForms
             findNext = new ToolStripButtonOverride();
             toolStrip1.SuspendLayout();
             SuspendLayout();
+            AutoScaleMode = AutoScaleMode.Dpi;
+            AutoSize = true;
             // 
             // firstPage
             // 
@@ -342,13 +350,14 @@ namespace Microsoft.Reporting.WinForms
             // toolStrip1
             // 
             toolStrip1.AccessibleName = "Toolstrip";
+            toolStrip1.AutoSize = true;
             toolStrip1.Dock = DockStyle.Fill;
             toolStrip1.GripStyle = ToolStripGripStyle.Hidden;
             toolStrip1.Items.AddRange(new ToolStripItem[] { firstPage, previousPage, currentPage, labelOf, totalPages, nextPage, lastPage, toolStripSeparator2, back, stop, refresh, toolStripSeparator3, DirectPrint, PrintDialog, printPreview, pageSetup, printerPageSettings, export, separator4, zoomIn, zoom, zoomOut, textToFind, find, toolStripSeparator4, findNext });
             toolStrip1.Location = new Point(0, 0);
             toolStrip1.Name = "toolStrip1";
             toolStrip1.RenderMode = ToolStripRenderMode.Professional;
-            toolStrip1.Size = new Size(714, 25);
+            toolStrip1.Size = new Size(0, 25);
             toolStrip1.TabIndex = 3;
             toolStrip1.TabStop = true;
             // 
@@ -486,11 +495,47 @@ namespace Microsoft.Reporting.WinForms
             BackColor = SystemColors.Control;
             Controls.Add(toolStrip1);
             Name = "ReportToolBar";
-            Size = new Size(714, 25);
+            Size = new Size(0, 25);
             toolStrip1.ResumeLayout(false);
             toolStrip1.PerformLayout();
             ResumeLayout(false);
             PerformLayout();
+        }
+
+        private void ConfigureModernLayout()
+        {
+            toolStrip1.AutoSize = true;
+            toolStrip1.CanOverflow = true;
+            toolStrip1.ImageScalingSize = new Size(18, 18);
+            toolStrip1.Padding = new Padding(8, 4, 8, 4);
+            toolStrip1.Renderer = new ModernReportToolStripRenderer();
+            toolStrip1.BackColor = Color.FromArgb(248, 250, 252);
+            toolStrip1.ForeColor = Color.FromArgb(38, 46, 56);
+
+            foreach (ToolStripItem item in toolStrip1.Items)
+            {
+                item.Margin = new Padding(1, 1, 1, 1);
+                if (item is ToolStripButton button && button.DisplayStyle == ToolStripItemDisplayStyle.Image)
+                {
+                    button.AutoSize = false;
+                    button.Size = new Size(30, 30);
+                }
+            }
+
+            currentPage.AutoSize = false;
+            currentPage.Width = 52;
+            currentPage.TextBox.BorderStyle = BorderStyle.FixedSingle;
+            currentPage.TextBox.BackColor = Color.White;
+
+            zoom.AutoSize = false;
+            zoom.Width = 112;
+            zoom.ComboBox.FlatStyle = FlatStyle.Flat;
+            zoom.ComboBox.BackColor = Color.White;
+
+            textToFind.AutoSize = false;
+            textToFind.Width = 160;
+            textToFind.TextBox.BorderStyle = BorderStyle.FixedSingle;
+            textToFind.TextBox.BackColor = Color.White;
         }
 
         private void OnZoomChanged(object sender, EventArgs e)
@@ -573,6 +618,21 @@ namespace Microsoft.Reporting.WinForms
             }
         }
 
+        private void OnExportDropDownOpening(object sender, EventArgs e)
+        {
+            try
+            {
+                if (ViewerControl != null && ViewerControl.CurrentStatus.CanExport)
+                {
+                    PopulateExportList();
+                }
+            }
+            catch (Exception ex)
+            {
+                ViewerControl?.UpdateUIState(ex);
+            }
+        }
+
         private void OnSearch(object sender, SearchEventArgs se)
         {
             if (this.Search != null)
@@ -600,7 +660,7 @@ namespace Microsoft.Reporting.WinForms
 
         public void OnPrinterPageSettingsClick()
         {
-            if (this.Print != null)
+            if (this.PrinterPageSettings != null)
             {
                 toolStrip1.Capture = false;
 
@@ -610,7 +670,7 @@ namespace Microsoft.Reporting.WinForms
 
         private void OnPrinterPageSettings_Click(object sender, EventArgs e)
         {
-            if (this.Print != null)
+            if (this.PrinterPageSettings != null)
             {
                 toolStrip1.Capture = false;
 
@@ -620,7 +680,7 @@ namespace Microsoft.Reporting.WinForms
 
         private void OnDPrint(object sender, EventArgs e)
         {
-            if (this.Print != null)
+            if (this.DPrint != null)
             {
                 toolStrip1.Capture = false;
 
@@ -787,6 +847,8 @@ namespace Microsoft.Reporting.WinForms
             stop.Enabled = currentStatus.InCancelableOperation;
             refresh.Enabled = currentStatus.CanRefreshData;
             PrintDialog.Enabled = currentStatus.CanPrint;
+            DirectPrint.Enabled = currentStatus.CanPrint;
+            printerPageSettings.Enabled = currentStatus.CanPrint;
             printPreview.Enabled = currentStatus.CanChangeDisplayModes;
             printPreview.Checked = (reportViewer.DisplayMode == DisplayMode.PrintLayout);
             pageSetup.Enabled = PrintDialog.Enabled;
@@ -813,20 +875,18 @@ namespace Microsoft.Reporting.WinForms
             refresh.Visible = reportViewer.ShowRefreshButton;
             toolStripSeparator3.Visible = (back.Visible || stop.Visible || refresh.Visible);
             PrintDialog.Visible = reportViewer.ShowPrintButton;
+            DirectPrint.Visible = reportViewer.ShowPrintButton;
             printPreview.Visible = reportViewer.ShowPrintButton;
             pageSetup.Visible = (PrintDialog.Visible || printPreview.Visible);
+            printerPageSettings.Visible = reportViewer.ShowPrintButton;
             export.Visible = reportViewer.ShowExportButton;
-            separator4.Visible = (PrintDialog.Visible || printPreview.Visible || export.Visible);
+            separator4.Visible = (DirectPrint.Visible || PrintDialog.Visible || printPreview.Visible || printerPageSettings.Visible || export.Visible);
             zoom.Visible = reportViewer.ShowZoomControl;
             bool showFindControls = reportViewer.ShowFindControls;
             toolStripSeparator4.Visible = showFindControls;
             find.Visible = showFindControls;
             findNext.Visible = showFindControls;
             textToFind.Visible = showFindControls;
-            if (export.Visible && export.Enabled)
-            {
-                PopulateExportList();
-            }
         }
 
         private void CurrentPage_KeyPress(object sender, KeyPressEventArgs e)

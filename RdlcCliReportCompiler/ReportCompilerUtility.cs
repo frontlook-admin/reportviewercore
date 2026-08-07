@@ -45,7 +45,7 @@ Options:
   --ExportFormat|-ef        Export format: PDF, EXCEL, EXCELOPENXML, WORD, WORDOPENXML, IMAGE, HTML4_0, HTML5, MHTML
   --ExportPath|-ep          Path where the exported file will be saved.
   --AttachSubReport|-asr    Attach sub reports using 'key1=value1,key2=value2'.
-  --PrintSetupFile|-psf     Path to the print setup file (JSON).
+  --PrintSetupFile|-psf     Path to the print setup file (JSON). Defaults to applicationPath/RdlcPrintSetting/ReportName.json.
   --WaitForViewer|-wfv      Wait for the viewer to close: true or false. Default: true.
   --EnableErrorLogging|-el  Include detailed exception information in CLI error logs: true or false.
   --Verbose|-v              Write lifecycle details to the console and log file.
@@ -91,7 +91,6 @@ Example:
             "ReportDataSource",
             "ReportName",
             "Mode",
-            "PrintSetupFile"
         };
 
         private static readonly Dictionary<string, string> GetParameters =
@@ -355,7 +354,11 @@ Example:
             var dataSourcePath = GetRequiredParameter("ReportDataSource");
             var reportName = GetRequiredParameter("ReportName");
             var mode = GetRequiredParameter("Mode");
-            var printSetupFile = GetRequiredParameter("PrintSetupFile");
+            var printSetupFile = GetOptionalParameter("PrintSetupFile");
+            if (string.IsNullOrWhiteSpace(printSetupFile))
+            {
+                printSetupFile = ReportViewer.GetDefaultPrintSettingFilePath(reportName);
+            }
             var logFile = GetOptionalParameter(LogFileOption);
 
             LogInfo("report_started", reportPath, null, new { Mode = mode, ReportName = reportName });
@@ -483,7 +486,7 @@ Example:
         {
             if (string.IsNullOrWhiteSpace(printSetupFile))
             {
-                throw new ArgumentException("PrintSetupFile cannot be empty.");
+                return;
             }
 
             var setupDirectory = Path.GetDirectoryName(printSetupFile);
@@ -504,7 +507,9 @@ Example:
             }
 
             var pageSettings = fileContent.FL_CastToClass<CustomPrintDialog>();
-            if (pageSettings?.CPageSettings != null)
+            // Accept both the current nested page-settings shape and older
+            // files that stored PaperSize/Landscape at the dialog level.
+            if (pageSettings?.CPageSettings != null || pageSettings?.PaperSize != null)
             {
                 report.PrintSettings = pageSettings;
                 return;
@@ -593,9 +598,9 @@ Example:
 
             try
             {
-                report.ExportFileName = temporaryExportPath;
                 LogInfo("export_started", exportPath, null, new { Format = report.ExportFormat.ToString() });
-                report.Export();
+                var exportedBytes = RenderExport(report);
+                File.WriteAllBytes(temporaryExportPath, exportedBytes);
 
                 if (!File.Exists(temporaryExportPath))
                 {
@@ -619,6 +624,18 @@ Example:
                     File.Delete(temporaryExportPath);
                 }
             }
+        }
+
+        private static byte[] RenderExport(FL_IRdlcReport report)
+        {
+            using var localReport = report.GetExportReport();
+            var deviceInfo = report.PrintSettings?.CPageSettings == null
+                ? null
+                : ReportViewer.CreateExportDeviceInfo(report.PrintSettings);
+
+            return string.IsNullOrWhiteSpace(deviceInfo)
+                ? localReport.Render(report.ExportFormat.ToString())
+                : localReport.Render(report.ExportFormat.ToString(), deviceInfo);
         }
 
         /// <summary>

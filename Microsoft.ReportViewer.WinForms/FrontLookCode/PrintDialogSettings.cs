@@ -156,10 +156,7 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
                 pd.UseEXDialog = UseEXDialog;
                 pd.ShowNetwork = ShowNetwork;
 
-                if (!string.IsNullOrEmpty(PrinterName))
-                {
-                    pd.PrinterSettings.PrinterName = PrinterName;
-                }
+                ApplyPrinterSettingsOrDefault(pd);
 
                 pd.PrinterSettings.PrintRange = PrintRange;
                 pd.PrinterSettings.Copies = Copies;
@@ -199,24 +196,27 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
                     }
                     else
                     {
-                        var paperSize = CPageSettings.PaperSize ?? new PaperSize("A4", 827, 1169);
-                        var pageSettings = CPageSettings.GetPageSettings();
+                        var pageSettings = GetCustomPageSettings();
+                        var paperSize = pageSettings?.PaperSize ?? PaperSize ?? new PaperSize("A4", 827, 1169);
                         
-                        if (!pd.PrinterSettings.PaperSizes.Cast<PaperSize>().Any(x => x == pageSettings.PaperSize))
+                        if (!pd.PrinterSettings.PaperSizes.Cast<PaperSize>().Any(x => x == paperSize))
                         {
                             pd.PrinterSettings.PaperSizes.Add(paperSize);
                         }
                         
-                        pd.PrinterSettings.DefaultPageSettings.PaperSize = pageSettings.PaperSize;
-                        pd.PrinterSettings.DefaultPageSettings.Landscape = pageSettings.Landscape;
+                        pd.PrinterSettings.DefaultPageSettings.PaperSize = paperSize;
+                        pd.PrinterSettings.DefaultPageSettings.Landscape = pageSettings?.Landscape ?? Landscape;
                     }
                 }
+
+                ApplyCustomPageSettings(pd.PrinterSettings);
 
                 return pd;
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"PrintDialogSettings.CreatePrintDialog: {ex.GetType().Name} - {ex.Message}\n{ex.StackTrace}");
+                pd.Dispose();
                 
                 // Return a default PrintDialog if configuration fails
                 var pf = new PrintDialog
@@ -248,10 +248,7 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
             printDialog.UseEXDialog = UseEXDialog;
             printDialog.ShowNetwork = ShowNetwork;
 
-            if (!string.IsNullOrEmpty(PrinterName))
-            {
-                printDialog.PrinterSettings.PrinterName = PrinterName;
-            }
+            ApplyPrinterSettingsOrDefault(printDialog);
 
             printDialog.PrinterSettings.PrintRange = PrintRange;
             printDialog.PrinterSettings.Copies = Copies;
@@ -291,17 +288,83 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
                 }
                 else
                 {
-                    var paperSize = CPageSettings.PaperSize ?? new PaperSize("A4", 827, 1169);
-                    var pageSettings = CPageSettings.GetPageSettings();
+                    var pageSettings = GetCustomPageSettings();
+                    var paperSize = pageSettings?.PaperSize ?? PaperSize ?? new PaperSize("A4", 827, 1169);
                     
-                    if (!printDialog.PrinterSettings.PaperSizes.Cast<PaperSize>().Any(x => x == pageSettings.PaperSize))
+                    if (!printDialog.PrinterSettings.PaperSizes.Cast<PaperSize>().Any(x => x == paperSize))
                     {
                         printDialog.PrinterSettings.PaperSizes.Add(paperSize);
                     }
                     
-                    printDialog.PrinterSettings.DefaultPageSettings.PaperSize = pageSettings.PaperSize;
-                    printDialog.PrinterSettings.DefaultPageSettings.Landscape = pageSettings.Landscape;
+                    printDialog.PrinterSettings.DefaultPageSettings.PaperSize = paperSize;
+                    printDialog.PrinterSettings.DefaultPageSettings.Landscape = pageSettings?.Landscape ?? Landscape;
                 }
+            }
+
+            ApplyCustomPageSettings(printDialog.PrinterSettings);
+        }
+
+        private void ApplyCustomPageSettings(PrinterSettings printerSettings)
+        {
+            if (CPageSettings == null)
+            {
+                return;
+            }
+
+            var pageSettings = GetCustomPageSettings();
+            if (pageSettings == null)
+            {
+                return;
+            }
+
+            var paperSize = pageSettings.PaperSize;
+            if (paperSize != null && !printerSettings.PaperSizes.Cast<PaperSize>().Any(x =>
+                x.PaperName == paperSize.PaperName && x.Width == paperSize.Width && x.Height == paperSize.Height))
+            {
+                printerSettings.PaperSizes.Add(paperSize);
+            }
+
+            var defaultPageSettings = printerSettings.DefaultPageSettings;
+            defaultPageSettings.PaperSize = paperSize;
+            defaultPageSettings.Landscape = pageSettings.Landscape;
+            defaultPageSettings.Margins = pageSettings.Margins;
+            defaultPageSettings.Color = pageSettings.Color;
+            defaultPageSettings.PaperSource = pageSettings.PaperSource;
+            defaultPageSettings.PrinterResolution = pageSettings.PrinterResolution;
+        }
+
+        private PageSettings GetCustomPageSettings()
+        {
+            if (CPageSettings == null)
+            {
+                return null;
+            }
+
+            var pageSetting = CPageSettings.Clone();
+            pageSetting.PaperSize ??= PaperSize;
+            return pageSetting.GetPageSettings();
+        }
+
+        private void ApplyPrinterSettingsOrDefault(PrintDialog printDialog)
+        {
+            if (string.IsNullOrWhiteSpace(PrinterName))
+            {
+                return;
+            }
+
+            try
+            {
+                printDialog.PrinterSettings.PrinterName = PrinterName;
+                if (!printDialog.PrinterSettings.IsValid)
+                {
+                    Debug.WriteLine($"PrintDialogSettings: printer '{PrinterName}' is unavailable; using the default printer.");
+                    printDialog.PrinterSettings = new PrinterSettings();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"PrintDialogSettings: unable to select printer '{PrinterName}': {ex.GetType().Name} - {ex.Message}");
+                printDialog.PrinterSettings = new PrinterSettings();
             }
         }
     }

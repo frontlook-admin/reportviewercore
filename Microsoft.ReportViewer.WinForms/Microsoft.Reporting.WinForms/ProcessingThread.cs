@@ -8,6 +8,8 @@ namespace Microsoft.Reporting.WinForms
 {
 	internal sealed class ProcessingThread
 	{
+		private const int PreviousOperationJoinTimeoutMilliseconds = 5000;
+
 		private AsyncReportOperation m_operation;
 
 		private Thread m_backgroundThread;
@@ -84,9 +86,12 @@ namespace Microsoft.Reporting.WinForms
 
 		public void BeginBackgroundOperation(AsyncReportOperation operation)
 		{
-			if (m_backgroundThread != null)
+			if (m_backgroundThread != null && m_backgroundThread.IsAlive)
 			{
-				m_backgroundThread.Join();
+				if (!m_backgroundThread.Join(PreviousOperationJoinTimeoutMilliseconds))
+				{
+					throw new InvalidOperationException("The previous report rendering operation did not finish after cancellation.");
+				}
 			}
 			
 			// Dispose previous cancellation token source if it exists

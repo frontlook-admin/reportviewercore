@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Text.RegularExpressions;
 using ReportViewerControl = Microsoft.Reporting.WinForms.ReportViewer;
 
 namespace Microsoft.ReportViewer.WinForms.Tests
@@ -356,6 +357,40 @@ namespace Microsoft.ReportViewer.WinForms.Tests
         }
 
         [Fact]
+        public void CustomPrintDialog_JsonRoundTrip_PreservesSettingsSchemaVersion()
+        {
+            var original = new CustomPrintDialog();
+
+            var json = original.GetJsonData();
+            json.Should().Contain("SettingsSchemaVersion");
+
+            var restored = new CustomPrintDialog(json);
+
+            restored.SettingsSchemaVersion.Should().Be(CustomPrintDialog.CurrentSettingsSchemaVersion);
+        }
+
+        [Fact]
+        public void CustomPrintDialog_LegacyJsonDefaultsToCurrentSettingsSchemaVersion()
+        {
+            var json = new CustomPrintDialog().GetJsonData();
+            json = Regex.Replace(json, "\\\"SettingsSchemaVersion\\\"\\s*:\\s*\\d+\\s*,?", string.Empty);
+
+            var restored = new CustomPrintDialog(json);
+
+            restored.SettingsSchemaVersion.Should().Be(CustomPrintDialog.CurrentSettingsSchemaVersion);
+        }
+
+        [Fact]
+        public void ReportViewer_DefaultPrintSettingFilePath_UsesReportName()
+        {
+            using var reportViewer = new ReportViewerControl();
+            reportViewer.LocalReport.DisplayName = "SalesReport.rdlc";
+
+            reportViewer.PrintSettingFilePath.Should().Be(
+                Path.Combine(AppContext.BaseDirectory, "RdlcPrintSetting", "SalesReport.json"));
+        }
+
+        [Fact]
         public void ReportViewer_CreateEMFDeviceInfo_UsesHundredthsOfAnInchMargins()
         {
             using var reportViewer = new ReportViewerControl();
@@ -394,6 +429,74 @@ namespace Microsoft.ReportViewer.WinForms.Tests
             deviceInfo.Should().Contain("<MarginRight>0in</MarginRight>");
             deviceInfo.Should().Contain("<MarginBottom>0.1968503937007874015748031496in</MarginBottom>");
             pageSetting.GetPageSettings().Margins.Left.Should().Be(20);
+        }
+
+        [Fact]
+        public void ReportViewer_CreateExportDeviceInfo_UsesExactMetricMargins()
+        {
+            var pageSetting = new CustomPageSetting
+            {
+                PaperSize = new PaperSize("A4", 827, 1169),
+                Margins = new Margins(20, 0, 20, 20),
+                LeftMarginMillimeters = 5.01m,
+                RightMarginMillimeters = 0.00m,
+                TopMarginMillimeters = 5.01m,
+                BottomMarginMillimeters = 5.01m
+            };
+
+            var deviceInfo = ReportViewerControl.CreateExportDeviceInfo(pageSetting);
+
+            deviceInfo.Should().Contain("<MarginTop>0.1972440944881889763779527559in</MarginTop>");
+            deviceInfo.Should().Contain("<MarginLeft>0.1972440944881889763779527559in</MarginLeft>");
+            deviceInfo.Should().NotContain("<OutputFormat>emf</OutputFormat>");
+        }
+
+        [Fact]
+        public void ReportViewer_CreateExportDeviceInfo_UsesLegacyDialogPaperSizeFallback()
+        {
+            var printSettings = new CustomPrintDialog
+            {
+                PaperSize = new PaperSize("A4", 827, 1169),
+                CPageSettings = new CustomPageSetting
+                {
+                    Margins = new Margins(39, 20, 16, 12)
+                }
+            };
+
+            var deviceInfo = ReportViewerControl.CreateExportDeviceInfo(printSettings);
+
+            deviceInfo.Should().Contain("<PageWidth>8.27in</PageWidth>");
+            deviceInfo.Should().Contain("<PageHeight>11.69in</PageHeight>");
+            deviceInfo.Should().Contain("<MarginLeft>0.39in</MarginLeft>");
+        }
+
+        [Fact]
+        public void ReportViewer_SavePrintSetting_CreatesDirectoryAndPersistsJsonAtomically()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "RdlcViewerTests", Guid.NewGuid().ToString("N"));
+            var filePath = Path.Combine(directory, "print-settings.json");
+
+            try
+            {
+                using var reportViewer = new ReportViewerControl
+                {
+                    PrintSettingFilePath = filePath,
+                    CustomPrintDialog = new CustomPrintDialog(new PrinterSettings(), new PageSettings())
+                };
+
+                reportViewer.SavePrintSetting();
+
+                File.Exists(filePath).Should().BeTrue();
+                File.ReadAllText(filePath).Should().Contain("CPageSettings");
+                Directory.GetFiles(directory, "*.tmp").Should().BeEmpty();
+            }
+            finally
+            {
+                if (Directory.Exists(directory))
+                {
+                    Directory.Delete(directory, recursive: true);
+                }
+            }
         }
 
         [Fact]

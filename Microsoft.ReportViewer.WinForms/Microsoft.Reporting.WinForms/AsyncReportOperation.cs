@@ -9,6 +9,10 @@ namespace Microsoft.Reporting.WinForms
 
 		public Report Report => m_report;
 
+		public long Generation { get; set; }
+
+		internal DateTime StartedAtUtc { get; set; } = DateTime.UtcNow;
+
 		public event AsyncCompletedEventHandler Completed;
 
 		protected AsyncReportOperation(Report report)

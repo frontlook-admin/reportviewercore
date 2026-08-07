@@ -848,6 +848,7 @@ namespace Microsoft.Reporting.WinForms
 		{
 			InitializeComponent();
 			InitializeContextMenu();
+			BackColor = Color.FromArgb(243, 246, 250);
 			AutoScroll = true;
 			m_renderPanel = new RenderingPanel(this);
 			m_renderPanel.Dock = DockStyle.None;
@@ -855,6 +856,7 @@ namespace Microsoft.Reporting.WinForms
 			m_renderPanel.Location = new Point(0, 0);
 			m_renderPanel.SizeChanged += OnRenderingPanelSizeChanged;
 			m_renderPanel.MouseClick += OnMouseClick;
+			m_renderPanel.BackColor = BackColor;
 			base.MouseClick += OnMouseClick;
 			m_previousChildActionPoints = new Dictionary<string, Point>();
 			base.Controls.Add(m_renderPanel);
@@ -1018,13 +1020,33 @@ namespace Microsoft.Reporting.WinForms
 			m_backToolStripMenuItem.Click += OnBackClick;
 			m_refreshToolStripMenuItem.Click += OnReportRefreshClick;
 			m_printToolStripMenuItem.Click += OnPrintClick;
+			m_dprintToolStripMenuItem.Click += OnDirectPrintClick;
 			m_printLayoutToolStripMenuItem.Click += OnPrintLayoutClick;
 			m_stopToolStripMenuItem.Click += OnStopClick;
 			m_pageSetupToolStripMenuItem.Click += OnPageSettingsClick;
+			m_printerPageSettingsToolStripMenuItem.Click += OnPrinterPageSettingsClick;
+		}
+
+		private void OnDirectPrintClick(object sender, EventArgs e)
+		{
+			if (DPrint != null)
+			{
+				DPrint(this, e);
+			}
+		}
+
+		private void OnPrinterPageSettingsClick(object sender, EventArgs e)
+		{
+			if (PrinterPageSettings != null)
+			{
+				PrinterPageSettings(this, e);
+			}
 		}
 
 		private void ApplyContextMenuCustomResources()
 		{
+			m_dprintToolStripMenuItem.Text = ReportPreviewStrings.DirectPrintMenuItemText;
+			m_printerPageSettingsToolStripMenuItem.Text = ReportPreviewStrings.PrinterPageSettingsMenuItemText;
 			string documentMapMenuItemText = LocalizationHelper.Current.DocumentMapMenuItemText;
 			if (documentMapMenuItemText != null)
 			{
@@ -1737,7 +1759,9 @@ namespace Microsoft.Reporting.WinForms
 			m_backToolStripMenuItem.Visible = reportViewer.ShowBackButton;
 			m_refreshToolStripMenuItem.Visible = reportViewer.ShowRefreshButton;
 			m_printToolStripMenuItem.Visible = reportViewer.ShowPrintButton;
+			m_dprintToolStripMenuItem.Visible = reportViewer.ShowPrintButton;
 			m_printLayoutToolStripMenuItem.Visible = reportViewer.ShowPrintButton;
+			m_printerPageSettingsToolStripMenuItem.Visible = reportViewer.ShowPrintButton;
 			m_pageSetupToolStripMenuItem.Visible = (m_printToolStripMenuItem.Enabled || m_printLayoutToolStripMenuItem.Enabled);
 			m_exportToolStripMenuItem.Visible = reportViewer.ShowExportButton;
 			m_stopToolStripMenuItem.Visible = reportViewer.ShowStopButton;

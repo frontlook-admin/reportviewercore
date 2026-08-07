@@ -180,6 +180,10 @@ namespace Microsoft.Reporting.WinForms
 
 			public const string PrintMenuItemText = "PrintMenuItemText";
 
+			public const string DirectPrintMenuItemText = "DirectPrintMenuItemText";
+
+			public const string PrinterPageSettingsMenuItemText = "PrinterPageSettingsMenuItemText";
+
 			public const string PrintLayoutMenuItemText = "PrintLayoutMenuItemText";
 
 			public const string ExportMenuItemText = "ExportMenuItemText";
@@ -439,6 +443,10 @@ namespace Microsoft.Reporting.WinForms
 		public static string RefreshMenuItemText => Keys.GetString("RefreshMenuItemText");
 
 		public static string PrintMenuItemText => Keys.GetString("PrintMenuItemText");
+
+		public static string DirectPrintMenuItemText => Keys.GetString("DirectPrintMenuItemText");
+
+		public static string PrinterPageSettingsMenuItemText => Keys.GetString("PrinterPageSettingsMenuItemText");
 
 		public static string PrintLayoutMenuItemText => Keys.GetString("PrintLayoutMenuItemText");
 

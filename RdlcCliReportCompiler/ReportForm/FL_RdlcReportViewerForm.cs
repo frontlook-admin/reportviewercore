@@ -40,21 +40,33 @@ namespace CliReportCompiler.ReportForm
             base.OnLoad(e);
 
             LoadReport();
+            ApplyStoredPrintSettings();
+            reportViewer.RefreshReport();
+            // Refresh once in Normal mode to prepare the report, then force a
+            // second refresh in PrintLayout. The second refresh must run after
+            // the custom settings are applied; otherwise a completed Normal
+            // render can be reused without the custom page geometry.
+            reportViewer.SetDisplayMode(DisplayMode.PrintLayout);
             reportViewer.RefreshReport();
 
             if (reportCompiler.TriggerPrintSettings)
             {
                 ShowPrintSetup();
             }
-            else
+            else if (reportCompiler.TriggerPrint)
             {
-                ApplyStoredPrintSettings();
+                reportCompiler.TriggerPrint = false;
+                reportViewer.DPrint();
+                Close();
             }
         }
 
         public void Print()
         {
             LoadReport();
+            ApplyStoredPrintSettings();
+            reportViewer.RefreshReport();
+            reportViewer.SetDisplayMode(DisplayMode.PrintLayout);
             reportViewer.RefreshReport();
             reportViewer.DPrint();
         }
@@ -85,6 +97,8 @@ namespace CliReportCompiler.ReportForm
             {
                 reportViewer.LocalReport.LoadReportDefinition(reportStream);
             }
+
+            reportViewer.LocalReport.DisplayName = reportCompiler.ReportName;
 
             var hasSubReports = LoadSubreports();
             LoadParameters();
@@ -180,20 +194,12 @@ namespace CliReportCompiler.ReportForm
 
         private void ApplyStoredPrintSettings()
         {
-            if (reportCompiler.PrintSettings?.CPageSettings == null)
+            if (reportCompiler.PrintSettings == null)
             {
                 return;
             }
 
-            reportViewer.SetPageSettings(reportCompiler.PrintSettings.CPageSettings.GetPageSettings());
-            reportViewer.Refresh();
-
-            if (reportCompiler.TriggerPrint)
-            {
-                reportCompiler.TriggerPrint = false;
-                reportViewer.DPrint();
-                Close();
-            }
+            reportViewer.SetPageSettings(reportCompiler.PrintSettings.GetPageSettings());
         }
 
         private void ShowPrintSetup()

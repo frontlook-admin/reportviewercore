@@ -70,7 +70,9 @@ namespace Microsoft.Reporting.WinForms
 
 		protected override void OnQueryPageSettings(QueryPageSettingsEventArgs e)
 		{
-			e.PageSettings = (PageSettings)m_pageSettings.Clone();
+			var pageSettings = (PageSettings)m_pageSettings.Clone();
+			pageSettings.PrinterSettings = base.PrinterSettings;
+			e.PageSettings = pageSettings;
 		}
 	}
 }

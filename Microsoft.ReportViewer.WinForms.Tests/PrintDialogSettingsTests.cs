@@ -231,6 +231,39 @@ namespace Microsoft.ReportViewer.WinForms.Tests
         }
 
         [Fact]
+        public void CreatePrintDialog_WithUnavailablePrinter_UsesDefaultPrinter()
+        {
+            var settings = new PrintDialogSettings
+            {
+                PrinterName = "RdlcViewerPrinterThatDoesNotExist"
+            };
+
+            using var printDialog = settings.CreatePrintDialog();
+
+            printDialog.PrinterSettings.IsValid.Should().BeTrue();
+        }
+
+        [Fact]
+        public void CreatePrintDialog_AppliesCustomMarginsToDefaultPageSettings()
+        {
+            var settings = new PrintDialogSettings
+            {
+                CPageSettings = new CustomPageSetting
+                {
+                    PaperSize = new PaperSize("A4", 827, 1169),
+                    Margins = new Margins(20, 0, 40, 60)
+                }
+            };
+
+            using var printDialog = settings.CreatePrintDialog();
+
+            printDialog.PrinterSettings.DefaultPageSettings.Margins.Left.Should().Be(20);
+            printDialog.PrinterSettings.DefaultPageSettings.Margins.Right.Should().Be(0);
+            printDialog.PrinterSettings.DefaultPageSettings.Margins.Top.Should().Be(40);
+            printDialog.PrinterSettings.DefaultPageSettings.Margins.Bottom.Should().Be(60);
+        }
+
+        [Fact]
         public void ApplyTo_WithEmptyPrinterName_DoesNotOverwritePrinterSettings()
         {
             // Arrange

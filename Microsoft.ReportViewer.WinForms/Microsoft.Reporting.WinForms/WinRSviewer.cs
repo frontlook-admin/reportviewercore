@@ -70,6 +70,10 @@ namespace Microsoft.Reporting.WinForms
 			{
 				base.BackColor = value;
 				m_errorBox.BackColor = value;
+				if (m_reportPanel != null)
+				{
+					m_reportPanel.BackColor = value;
+				}
 			}
 		}
 
@@ -233,12 +237,17 @@ namespace Microsoft.Reporting.WinForms
 			m_errorBox.Text = "Error";
 			m_errorBox.Dock = DockStyle.Fill;
 			m_errorBox.Multiline = true;
-			m_errorBox.ScrollBars = ScrollBars.Horizontal;
+			m_errorBox.ScrollBars = ScrollBars.Both;
+			m_errorBox.WordWrap = false;
+			m_errorBox.Padding = new Padding(16);
+			m_errorBox.TextAlign = HorizontalAlignment.Left;
+			m_errorBox.AccessibleName = "Report viewer error message";
+			m_errorBox.TabStop = true;
 			m_errorBox.Size = new Size(663, 397);
 			m_errorBox.TabIndex = 1;
 			m_errorBox.TextAlign = HorizontalAlignment.Center;
 			m_errorBox.Visible = false;
-			BackColor = System.Drawing.Color.White;
+				BackColor = System.Drawing.Color.FromArgb(243, 246, 250);
 			AutoScroll = true;
 			AutoScrollMinSize = new Size(50, 50);
 			Location = new Point(10, 10);
@@ -271,7 +280,7 @@ namespace Microsoft.Reporting.WinForms
 
 		public void ShowMessage(string text, bool enabled)
 		{
-			m_errorBox.Text = "\r\n\r\n" + text;
+			m_errorBox.Text = text;
 			m_errorBox.Enabled = enabled;
 			m_errorBox.SelectionStart = 0;
 			m_errorBox.SelectionLength = 0;

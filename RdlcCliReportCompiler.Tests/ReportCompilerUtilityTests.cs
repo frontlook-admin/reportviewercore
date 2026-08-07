@@ -137,6 +137,16 @@ public sealed class ReportCompilerUtilityTests
     }
 
     [Fact]
+    public void GetDefaultPrintSettingFilePath_UsesApplicationDirectoryAndReportName()
+    {
+        var path = ReportViewer.GetDefaultPrintSettingFilePath("SalesReport.rdlc");
+
+        Assert.Equal(
+            Path.Combine(AppContext.BaseDirectory, "RdlcPrintSetting", "SalesReport.json"),
+            path);
+    }
+
+    [Fact]
     public void LogError_WritesStructuredJsonLogFile()
     {
         var logFile = Path.Combine(Path.GetTempPath(), $"rdlc-cli-{Guid.NewGuid():N}.jsonl");

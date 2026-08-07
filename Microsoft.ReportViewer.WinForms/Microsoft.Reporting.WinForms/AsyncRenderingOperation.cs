@@ -24,6 +24,8 @@ namespace Microsoft.Reporting.WinForms
 
 		protected string Format => m_format;
 
+		internal string OperationFormat => m_format;
+
 		protected string DeviceInfo => m_deviceInfo;
 
 		protected bool AllowInternalRenderers => m_allowInternalRenderers;

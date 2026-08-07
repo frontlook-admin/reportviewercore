@@ -24,6 +24,12 @@ namespace Microsoft.Reporting.WinForms
 
 		private string m_fileName;
 
+		private AsyncExportOperation m_exportOperation;
+
+		private bool m_cancelRequested;
+
+		private bool m_closing;
+
 		internal ExportDialog(ReportViewer viewer, RenderingExtension extension, string deviceInfo, string fileName)
 		{
 			InitializeComponent();
@@ -83,13 +89,21 @@ namespace Microsoft.Reporting.WinForms
 
 		protected override void OnLoad(EventArgs e)
 		{
+			base.OnLoad(e);
 			cancelButton.Font = Font;
 			try
 			{
-				m_viewerControl.CancelRendering(-1);
-				AsyncReportOperation asyncReportOperation = new AsyncMainStreamRenderingOperation(m_viewerControl.Report, PageCountMode.Estimate, m_format.Name, m_deviceInfo, allowInternalRenderers: false, null);
-				asyncReportOperation.Completed += OnExportComplete;
-				m_viewerControl.BackgroundThread.BeginBackgroundOperation(asyncReportOperation);
+				if (!m_viewerControl.CancelAllRenderingRequests())
+				{
+					throw new InvalidOperationException("The previous report rendering operation did not finish after cancellation.");
+				}
+
+				m_exportOperation = new AsyncExportOperation(m_viewerControl.Report, PageCountMode.Estimate, m_format.Name, m_deviceInfo, allowInternalRenderers: false, null);
+				m_exportOperation.StartedAtUtc = DateTime.UtcNow;
+				m_viewerControl.NotifyRenderingProgress(new ReportRenderProgress(ReportRenderStage.Started, m_format.Name, TimeSpan.Zero, null, null, "Report export started."));
+				m_viewerControl.NotifyRenderingProgress(new ReportRenderProgress(ReportRenderStage.Rendering, m_format.Name, TimeSpan.Zero, null, null, "Report export is in progress."));
+				m_exportOperation.Completed += OnExportComplete;
+				m_viewerControl.BackgroundThread.BeginBackgroundOperation(m_exportOperation);
 			}
 			catch (Exception ex)
 			{
@@ -102,56 +116,98 @@ namespace Microsoft.Reporting.WinForms
 
 		private void ProcessOnLoadException(Exception ex)
 		{
+			m_exportOperation?.Cleanup();
+			m_exportOperation = null;
 			m_viewerControl.DisplayErrorMsgBox(ex, LocalizationHelper.Current.ExportErrorTitle);
 			Close();
 		}
 
 		private void CancelButton_Click(object sender, EventArgs e)
 		{
+			if (m_cancelRequested)
+			{
+				return;
+			}
+
+			m_cancelRequested = true;
+			cancelButton.Enabled = false;
 			m_viewerControl.CancelRendering(0);
 		}
 
 		private void OnExportCompleteUI(object sender, AsyncCompletedEventArgs args)
 		{
-			AsyncMainStreamRenderingOperation asyncMainStreamRenderingOperation = (AsyncMainStreamRenderingOperation)sender;
-			if (args.Error != null)
+			var exportOperation = (AsyncExportOperation)sender;
+			if (m_closing)
 			{
-				if (!args.Cancelled)
-				{
-					m_viewerControl.DisplayErrorMsgBox(args.Error, LocalizationHelper.Current.ExportErrorTitle);
-				}
+				m_exportOperation = null;
+				exportOperation.Cleanup();
+				return;
 			}
-			else if (asyncMainStreamRenderingOperation.ReportBytes != null)
+
+			try
 			{
-				try
+				NotifyExportProgress(exportOperation, args);
+				if (args.Error != null)
 				{
-					using (Stream stream = PromptFileName(asyncMainStreamRenderingOperation.FileNameExtension))
+					if (!args.Cancelled)
 					{
-						if (stream != null)
-						{
-							stream.Write(asyncMainStreamRenderingOperation.ReportBytes, 0, asyncMainStreamRenderingOperation.ReportBytes.Length);
-							base.DialogResult = DialogResult.OK;
-						}
+						m_viewerControl.DisplayErrorMsgBox(args.Error, LocalizationHelper.Current.ExportErrorTitle);
 					}
 				}
-				catch (Exception ex)
+				else if (!string.IsNullOrWhiteSpace(exportOperation.OutputPath) && File.Exists(exportOperation.OutputPath))
 				{
-					m_viewerControl.DisplayErrorMsgBox(ex, LocalizationHelper.Current.ExportErrorTitle);
+					string destinationPath = PromptFileName(exportOperation.FileNameExtension);
+					if (!string.IsNullOrWhiteSpace(destinationPath))
+					{
+						CopyExportToDestination(exportOperation, destinationPath);
+						base.DialogResult = DialogResult.OK;
+					}
 				}
 			}
-			Close();
+			catch (Exception ex)
+			{
+				m_viewerControl.DisplayErrorMsgBox(ex, LocalizationHelper.Current.ExportErrorTitle);
+			}
+			finally
+			{
+				m_exportOperation = null;
+				exportOperation.Cleanup();
+				Close();
+			}
 		}
 
 		private void OnExportComplete(object sender, AsyncCompletedEventArgs args)
 		{
-			AsyncCompletedEventHandler method = OnExportCompleteUI;
-			BeginInvoke(method, sender, args);
+			if (m_closing || IsDisposed || Disposing || !IsHandleCreated)
+			{
+				((AsyncExportOperation)sender).Cleanup();
+				return;
+			}
+
+			try
+			{
+				BeginInvoke(new MethodInvoker(() => OnExportCompleteUI(sender, args)));
+			}
+			catch (InvalidOperationException)
+			{
+				((AsyncExportOperation)sender).Cleanup();
+			}
 		}
 
-		private Stream PromptFileName(string fileExtension)
+		protected override void OnFormClosing(FormClosingEventArgs e)
+		{
+			m_closing = true;
+			if (m_exportOperation != null)
+			{
+				m_viewerControl.CancelRendering(0);
+			}
+			base.OnFormClosing(e);
+		}
+
+		private string PromptFileName(string fileExtension)
 		{
 			_ = m_format.Name;
-			SaveFileDialog saveFileDialog = new SaveFileDialog();
+			using SaveFileDialog saveFileDialog = new SaveFileDialog();
 			string str = "";
 			if (fileExtension != null)
 			{
@@ -184,9 +240,143 @@ namespace Microsoft.Reporting.WinForms
 			}
 			if (flag2)
 			{
-				return saveFileDialog.OpenFile();
+				return saveFileDialog.FileName;
 			}
 			return null;
+		}
+
+		private static void CopyExportToDestination(AsyncExportOperation exportOperation, string destinationPath)
+		{
+			string fullDestinationPath = Path.GetFullPath(destinationPath);
+			string destinationDirectory = Path.GetDirectoryName(fullDestinationPath);
+			if (string.IsNullOrWhiteSpace(destinationDirectory))
+			{
+				throw new InvalidOperationException("The export destination directory is not valid.");
+			}
+
+			Directory.CreateDirectory(destinationDirectory);
+			string stagingDirectory = Path.Combine(
+				destinationDirectory,
+				$".{Path.GetFileName(fullDestinationPath)}.{Guid.NewGuid():N}.export");
+			Directory.CreateDirectory(stagingDirectory);
+
+			try
+			{
+				string stagedMainPath = Path.Combine(stagingDirectory, Path.GetFileName(fullDestinationPath));
+				CopyFile(exportOperation.OutputPath, stagedMainPath);
+
+                var stagedSecondaryFiles = new System.Collections.Generic.List<(string StagedPath, string DestinationPath)>();
+                var relativePaths = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (ExportedStream secondaryStream in exportOperation.SecondaryStreams)
+                {
+                    if (secondaryStream.IsInternal)
+                    {
+                        continue;
+                    }
+
+                    string relativePath = GetSafeRelativePath(secondaryStream.Name, secondaryStream.Path);
+					if (!relativePaths.Add(relativePath))
+					{
+						throw new InvalidOperationException($"The export contains duplicate secondary stream '{relativePath}'.");
+					}
+
+					string stagedPath = GetPathUnderDirectory(stagingDirectory, relativePath);
+					string secondaryDestinationPath = GetPathUnderDirectory(destinationDirectory, relativePath);
+					CopyFile(secondaryStream.Path, stagedPath);
+					stagedSecondaryFiles.Add((stagedPath, secondaryDestinationPath));
+				}
+
+				foreach (var secondaryFile in stagedSecondaryFiles)
+				{
+					Directory.CreateDirectory(Path.GetDirectoryName(secondaryFile.DestinationPath));
+					File.Move(secondaryFile.StagedPath, secondaryFile.DestinationPath, overwrite: true);
+				}
+
+				// Commit the main file last. It is fully prepared in the destination
+				// directory, so the final replacement is atomic on the same volume.
+				File.Move(stagedMainPath, fullDestinationPath, overwrite: true);
+			}
+			finally
+			{
+				try
+				{
+					if (Directory.Exists(stagingDirectory))
+					{
+						Directory.Delete(stagingDirectory, recursive: true);
+					}
+				}
+				catch (Exception ex)
+				{
+					System.Diagnostics.Debug.WriteLine($"ExportDialog.CleanupStagingDirectory: {ex.GetType().Name} - {ex.Message}");
+				}
+			}
+		}
+
+		private static void CopyFile(string sourcePath, string destinationPath)
+		{
+			string destinationDirectory = Path.GetDirectoryName(destinationPath);
+			if (string.IsNullOrWhiteSpace(destinationDirectory))
+			{
+				throw new InvalidOperationException("The export destination directory is not valid.");
+			}
+
+			Directory.CreateDirectory(destinationDirectory);
+			using (FileStream source = File.OpenRead(sourcePath))
+			using (FileStream destination = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, 64 * 1024, FileOptions.SequentialScan))
+			{
+				source.CopyTo(destination);
+				destination.Flush(flushToDisk: true);
+			}
+		}
+
+		private void NotifyExportProgress(AsyncExportOperation operation, AsyncCompletedEventArgs args)
+		{
+			ReportRenderStage stage = args.Cancelled
+				? ReportRenderStage.Cancelled
+				: args.Error == null ? ReportRenderStage.Completed : ReportRenderStage.Failed;
+			long? bytesRendered = null;
+			if (args.Error == null && File.Exists(operation.OutputPath))
+			{
+				bytesRendered = new FileInfo(operation.OutputPath).Length;
+			}
+
+			m_viewerControl.NotifyRenderingProgress(new ReportRenderProgress(
+				stage,
+				m_format.Name,
+				DateTime.UtcNow - operation.StartedAtUtc,
+				bytesRendered,
+				args.Error,
+				args.Error?.Message ?? $"Report export {stage.ToString().ToLowerInvariant()}."));
+		}
+
+		private static string GetSafeRelativePath(string streamName, string fallbackPath)
+		{
+			string path = string.IsNullOrWhiteSpace(streamName) ? Path.GetFileName(fallbackPath) : streamName.Trim();
+			path = path.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+			if (Path.IsPathRooted(path))
+			{
+				throw new InvalidOperationException($"The export contains an unsafe secondary stream path '{streamName}'.");
+			}
+
+			string[] segments = path.Split(new[] { Path.DirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
+			if (segments.Length == 0 || Array.Exists(segments, segment => segment == ".." || segment.IndexOf(Path.VolumeSeparatorChar) >= 0))
+			{
+				throw new InvalidOperationException($"The export contains an unsafe secondary stream path '{streamName}'.");
+			}
+
+			return Path.Combine(segments);
+		}
+
+		private static string GetPathUnderDirectory(string directory, string relativePath)
+		{
+			string root = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+			string fullPath = Path.GetFullPath(Path.Combine(directory, relativePath));
+			if (!fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+			{
+				throw new InvalidOperationException($"The export contains an unsafe secondary stream path '{relativePath}'.");
+			}
+
+			return fullPath;
 		}
 
 		private string ReplaceReservedCharacters(string original)

@@ -170,6 +170,8 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
 
     public class CustomPrintDialog
     {
+        public const int CurrentSettingsSchemaVersion = 2;
+
         public CustomPrintDialog()
         {
 
@@ -272,10 +274,14 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
                 throw new ArgumentException("JSON data cannot be null or empty.", nameof(JsonData));
 
             var printDialog = JsonData.CastToClass<CustomPrintDialog>();
+            if (printDialog == null)
+                throw new ArgumentException("JSON data does not contain valid print settings.", nameof(JsonData));
+
             PrinterName = printDialog.PrinterName;
             AllowSomePages = printDialog.AllowSomePages;
             AllowSelection = printDialog.AllowSelection;
             AllowPrintToFile = printDialog.AllowPrintToFile;
+            PrintToFile = printDialog.PrintToFile;
             UseEXDialog = printDialog.UseEXDialog;
             ShowNetwork = printDialog.ShowNetwork;
             PrintRange = printDialog.PrintRange;
@@ -284,6 +290,9 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
             PaperSize = printDialog.PaperSize;
             Landscape = printDialog.Landscape;
             PrintType = printDialog.PrintType;
+            SettingsSchemaVersion = printDialog.SettingsSchemaVersion > 0
+                ? printDialog.SettingsSchemaVersion
+                : CurrentSettingsSchemaVersion;
 
             CPageSettings = printDialog.CPageSettings;
 
@@ -303,6 +312,7 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
         public virtual bool Landscape { get; set; }
         public virtual PrintType PrintType { get; set; }
         public virtual CustomPageSetting CPageSettings { get; set; }
+        public virtual int SettingsSchemaVersion { get; set; } = CurrentSettingsSchemaVersion;
 
         public virtual string GetJsonData()
         {
@@ -316,11 +326,22 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
         }
         public virtual PageSettings GetPageSettings()
         {
-            return CPageSettings.GetPageSettings();
+            var pageSetting = CPageSettings?.Clone() ?? new CustomPageSetting
+            {
+                PaperSize = PaperSize,
+                Landscape = Landscape,
+                Margins = new Margins()
+            };
+
+            // Older settings files stored PaperSize at the dialog level and
+            // left CPageSettings.PaperSize null. Preserve that format when
+            // reconstructing the effective report page settings.
+            pageSetting.PaperSize ??= PaperSize;
+            return pageSetting.GetPageSettings();
         }
         public virtual PageSettings GetSetupPageSettings()
         {
-            return CPageSettings.GetPageSettings();
+            return GetPageSettings();
         }
 
         /// <summary>

@@ -15,6 +15,8 @@ using System.Drawing.Printing;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using Interlocked = System.Threading.Interlocked;
+using Volatile = System.Threading.Volatile;
 using System.Windows.Forms;
 
 namespace Microsoft.Reporting.WinForms
@@ -109,11 +111,17 @@ namespace Microsoft.Reporting.WinForms
 
         private ReportPageSettings m_reportPageSettings;
 
+        private string m_printSettingFilePath;
+
+        private const int RenderingCancellationTimeoutMilliseconds = 5000;
+
+        private long m_renderGeneration;
+
         private IReportViewerMessages m_reportViewerMessages;
 
         private Queue<MethodInvoker> m_pendingAsyncInvokes = new Queue<MethodInvoker>();
 
-        private ToolStripRenderer m_toolStripRenderer = new ToolStripProfessionalRenderer();
+        private ToolStripRenderer m_toolStripRenderer = new ModernReportToolStripRenderer();
 
         private ReportViewerStatus m_status;
 
@@ -150,7 +158,7 @@ namespace Microsoft.Reporting.WinForms
             }
         }
 
-        [DefaultValue(typeof(Color), "White")]
+        [DefaultValue(typeof(Color), "243, 246, 250")]
         public override Color BackColor
         {
             get
@@ -802,6 +810,8 @@ namespace Microsoft.Reporting.WinForms
         [SRDescription("RenderBeginEventDesc")]
         public event CancelEventHandler RenderingBegin;
 
+        public event EventHandler<ReportRenderProgress> RenderingProgress;
+
         [SRDescription("SearchEventDesc")]
         public event SearchEventHandler Search;
 
@@ -823,6 +833,8 @@ namespace Microsoft.Reporting.WinForms
         public ReportViewer()
         {
             InitializeComponent();
+            reportToolBar.SetToolStripRenderer(m_toolStripRenderer);
+            winRSviewer.SetToolStripRenderer(m_toolStripRenderer);
             reportToolBar.ViewerControl = this;
             rsParams.ViewerControl = this;
             winRSviewer.ViewerControl = this;
@@ -1216,6 +1228,7 @@ namespace Microsoft.Reporting.WinForms
             dmSplitContainer.Panel2.SuspendLayout();
             dmSplitContainer.SuspendLayout();
             SuspendLayout();
+            AutoScaleMode = AutoScaleMode.Dpi;
             paramsSplitContainer.Dock = DockStyle.Fill;
             paramsSplitContainer.Orientation = Orientation.Horizontal;
             paramsSplitContainer.Size = new Size(396, 246);
@@ -1261,7 +1274,7 @@ namespace Microsoft.Reporting.WinForms
             winRSviewer.AutoScroll = true;
             winRSviewer.Dock = DockStyle.Fill;
             winRSviewer.Size = new Size(398, 221);
-            winRSviewer.BackColor = System.Drawing.Color.White;
+            winRSviewer.BackColor = System.Drawing.Color.FromArgb(243, 246, 250);
             winRSviewer.CausesValidation = false;
             winRSviewer.Name = "winRSviewer";
             winRSviewer.ShowContextMenu = true;
@@ -1275,8 +1288,8 @@ namespace Microsoft.Reporting.WinForms
             winRSviewer.Export += new Microsoft.Reporting.WinForms.ExportEventHandler(OnExport);
             winRSviewer.Back += new System.EventHandler(OnBack);
             reportToolBar.Dock = DockStyle.Top;
-            reportToolBar.Size = new Size(396, 25);
-            reportToolBar.BackColor = System.Drawing.SystemColors.Control;
+            reportToolBar.Size = new Size(396, 40);
+            reportToolBar.BackColor = System.Drawing.Color.FromArgb(248, 250, 252);
             reportToolBar.Name = "reportToolBar";
             reportToolBar.ZoomChange += new Microsoft.Reporting.WinForms.ZoomChangedEventHandler(OnZoomChanged);
             reportToolBar.ReportRefresh += new System.EventHandler(OnRefresh);
@@ -1288,7 +1301,7 @@ namespace Microsoft.Reporting.WinForms
             reportToolBar.Search += new Microsoft.Reporting.WinForms.SearchEventHandler(OnSearch);
             reportToolBar.Back += new System.EventHandler(OnBack);
             reportToolBar.PageNavigation += new Microsoft.Reporting.WinForms.PageNavigationEventHandler(OnPageNavigation);
-            BackColor = System.Drawing.Color.White;
+            BackColor = System.Drawing.Color.FromArgb(243, 246, 250);
             BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             base.Controls.Add(paramsSplitContainer);
             base.Name = "ReportViewer";
@@ -1390,11 +1403,17 @@ namespace Microsoft.Reporting.WinForms
             return false;
         }
 
-        private void CancelAllRenderingRequests()
+        internal bool CancelAllRenderingRequests()
         {
-            CancelRendering(m_disposing ? 0 : -1);
+            Interlocked.Increment(ref m_renderGeneration);
+            bool completed = CancelRendering(RenderingCancellationTimeoutMilliseconds);
+            if (completed && m_reportHierarchy.Count > 0 && CurrentReport.FileManager.Status == FileManagerStatus.InProgress)
+            {
+                CurrentReport.FileManager.Status = FileManagerStatus.Aborted;
+            }
             CancelAutoRefreshTimer();
             ProcessAsyncInvokes();
+            return completed;
         }
 
         public bool CancelRendering(int millisecondsTimeout)
@@ -1469,7 +1488,11 @@ namespace Microsoft.Reporting.WinForms
 
         public void Clear()
         {
-            CancelAllRenderingRequests();
+            if (!CancelAllRenderingRequests())
+            {
+                UpdateUIState(new InvalidOperationException("The report rendering operation did not finish after cancellation."));
+                return;
+            }
             CurrentReport.ClearGdiPage();
             CurrentReport.CurrentPage = 0;
             m_searchState = null;
@@ -1480,7 +1503,11 @@ namespace Microsoft.Reporting.WinForms
 
         public void Reset()
         {
-            CancelAllRenderingRequests();
+            if (!CancelAllRenderingRequests())
+            {
+                UpdateUIState(new InvalidOperationException("The report rendering operation did not finish after cancellation."));
+                return;
+            }
             m_reportHierarchy.Clear();
             PushReport(CreateLocalReport(), new ServerReport());
             rsParams.Clear();
@@ -1519,6 +1546,10 @@ namespace Microsoft.Reporting.WinForms
                 return;
             }
             AsyncRenderingOperation asyncRenderingOperation = (AsyncRenderingOperation)sender;
+            if (asyncRenderingOperation.Generation != Volatile.Read(ref m_renderGeneration))
+            {
+                return;
+            }
             if (m_viewMode == DisplayMode.PrintLayout)
             {
                 if (args.Error != null)
@@ -1581,6 +1612,7 @@ namespace Microsoft.Reporting.WinForms
                     UpdateUIState(e);
                 }
             }
+            NotifyRenderingProgress(asyncRenderingOperation, args);
             if (this.RenderingComplete != null)
             {
                 RenderingCompleteEventArgs e2 = new RenderingCompleteEventArgs(asyncRenderingOperation.Warnings, args.Error);
@@ -1637,6 +1669,44 @@ namespace Microsoft.Reporting.WinForms
             MessageBoxWrappers.ShowMessageBox(this, text, title, MessageBoxButtons.OK, MessageBoxIcon.Hand);
         }
 
+        internal void NotifyRenderingProgress(ReportRenderProgress progress)
+        {
+            if (progress == null || m_disposing)
+            {
+                return;
+            }
+
+            try
+            {
+                RenderingProgress?.Invoke(this, progress);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"ReportViewer.RenderingProgress: {ex.GetType().Name} - {ex.Message}");
+            }
+        }
+
+        private void NotifyRenderingProgress(AsyncRenderingOperation operation, AsyncCompletedEventArgs args)
+        {
+            ReportRenderStage stage = args.Cancelled
+                ? ReportRenderStage.Cancelled
+                : args.Error == null ? ReportRenderStage.Completed : ReportRenderStage.Failed;
+            long? bytesRendered = null;
+            if (operation is AsyncMainStreamRenderingOperation mainStreamOperation && mainStreamOperation.ReportBytes != null)
+            {
+                bytesRendered = mainStreamOperation.ReportBytes.LongLength;
+            }
+
+            TimeSpan elapsed = DateTime.UtcNow - operation.StartedAtUtc;
+            NotifyRenderingProgress(new ReportRenderProgress(
+                stage,
+                operation.OperationFormat,
+                elapsed,
+                bytesRendered,
+                args.Error,
+                args.Error?.Message ?? $"Report rendering {stage.ToString().ToLowerInvariant()}."));
+        }
+
         private AsyncReportOperationWrapper WrapAsyncOperationForUIThreadNotification(AsyncReportOperation operation)
         {
             AsyncReportOperationWrapper asyncReportOperationWrapper = new AsyncReportOperationWrapper(operation);
@@ -1655,29 +1725,60 @@ namespace Microsoft.Reporting.WinForms
 
         private void ProcessAsyncInvokes()
         {
+            List<MethodInvoker> pendingInvokes;
             lock (m_pendingAsyncInvokes)
             {
-                while (m_pendingAsyncInvokes.Count > 0)
+                pendingInvokes = new List<MethodInvoker>(m_pendingAsyncInvokes);
+                m_pendingAsyncInvokes.Clear();
+            }
+
+            foreach (var pendingInvoke in pendingInvokes)
+            {
+                if (m_disposing || IsDisposed || Disposing)
                 {
-                    m_pendingAsyncInvokes.Dequeue()();
+                    return;
                 }
+
+                pendingInvoke();
             }
         }
 
         private void RegisterAsyncInvoke(MethodInvoker method)
         {
+            if (method == null || m_disposing || IsDisposed || Disposing)
+            {
+                return;
+            }
+
             lock (m_pendingAsyncInvokes)
             {
+                if (m_disposing || IsDisposed || Disposing)
+                {
+                    return;
+                }
+
                 m_pendingAsyncInvokes.Enqueue(method);
                 if (base.IsHandleCreated)
                 {
-                    BeginInvoke(new MethodInvoker(ProcessAsyncInvokes));
+                    try
+                    {
+                        BeginInvoke(new MethodInvoker(ProcessAsyncInvokes));
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // The handle can be destroyed between the check and BeginInvoke.
+                    }
                 }
             }
         }
 
         private void OnRenderingCompletePrintOnly(object sender, AsyncCompletedEventArgs args)
         {
+            if (m_disposing || ((AsyncRenderingOperation)sender).Generation != Volatile.Read(ref m_renderGeneration))
+            {
+                return;
+            }
+
             if (((AsyncRenderingOperation)sender).PostRenderArgs.IsPartialRendering || args.Error != null)
             {
                 CurrentReport.FileManager.Status = FileManagerStatus.Aborted;
@@ -1686,10 +1787,17 @@ namespace Microsoft.Reporting.WinForms
             {
                 CurrentReport.FileManager.Status = FileManagerStatus.Complete;
             }
+
+			NotifyRenderingProgress((AsyncRenderingOperation)sender, args);
         }
 
         private void OnAsyncLoadCompleted(object sender, AsyncCompletedEventArgs args)
         {
+            if (m_disposing || ((AsyncLoadOperation)sender).Generation != Volatile.Read(ref m_renderGeneration))
+            {
+                return;
+            }
+
             if (args.Error != null)
             {
                 UpdateUIState(args.Error);
@@ -1709,6 +1817,7 @@ namespace Microsoft.Reporting.WinForms
         {
             Clear();
             AsyncLoadOperation asyncLoadOperation = new AsyncLoadOperation(Report, reportDefinition);
+            asyncLoadOperation.Generation = Interlocked.Increment(ref m_renderGeneration);
             asyncLoadOperation.Completed += OnAsyncLoadCompleted;
             AsyncReportOperationWrapper operation = WrapAsyncOperationForUIThreadNotification(asyncLoadOperation);
             UpdateUIState(UIState.LongRunningAction);
@@ -1896,7 +2005,52 @@ namespace Microsoft.Reporting.WinForms
 
         [Browsable(true)]
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public string PrintSettingFilePath { get; set; }
+        public string PrintSettingFilePath
+        {
+            get => string.IsNullOrWhiteSpace(m_printSettingFilePath)
+                ? GetDefaultPrintSettingFilePathForCurrentReport()
+                : m_printSettingFilePath;
+            set => m_printSettingFilePath = value;
+        }
+
+        public static string GetDefaultPrintSettingFilePath(string reportName)
+        {
+            var safeReportName = GetSafePrintSettingReportName(reportName);
+            return Path.Combine(AppContext.BaseDirectory, "RdlcPrintSetting", $"{safeReportName}.json");
+        }
+
+        private string GetDefaultPrintSettingFilePathForCurrentReport()
+        {
+            string reportName = null;
+            try
+            {
+                reportName = Report.DisplayNameForUse;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"ReportViewer.GetDefaultPrintSettingFilePath: {ex.GetType().Name} - {ex.Message}");
+            }
+
+            return GetDefaultPrintSettingFilePath(reportName);
+        }
+
+        private static string GetSafePrintSettingReportName(string reportName)
+        {
+            var name = Path.GetFileNameWithoutExtension(reportName ?? string.Empty);
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                name = "Report";
+            }
+
+            var invalidCharacters = Path.GetInvalidFileNameChars();
+            var safeName = new StringBuilder(name.Length);
+            foreach (var character in name)
+            {
+                safeName.Append(Array.IndexOf(invalidCharacters, character) >= 0 ? '_' : character);
+            }
+
+            return string.IsNullOrWhiteSpace(safeName.ToString()) ? "Report" : safeName.ToString();
+        }
         [Browsable(true)]
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public CustomPrintDialog CustomPrintDialog { get; set; }
@@ -1904,16 +2058,12 @@ namespace Microsoft.Reporting.WinForms
         // save print settings for next time
         public void SavePrintSetting()
         {
-            if (PrintSettingFilePath == null || CustomPrintDialog == null)
+            if (string.IsNullOrWhiteSpace(PrintSettingFilePath) || CustomPrintDialog == null)
             {
                 return;
-
-            }
-            else
-            {
-                File.WriteAllText(PrintSettingFilePath, CustomPrintDialog.FL_CastToJson());
             }
 
+            SavePrintSettingsToFile(CustomPrintDialog);
         }
 
         /// <summary>
@@ -1980,12 +2130,38 @@ namespace Microsoft.Reporting.WinForms
                 try
                 {
                     var json = printDialog.FL_CastToJson();
-                    File.WriteAllText(PrintSettingFilePath, json);
+                    WriteTextFileAtomically(PrintSettingFilePath, json);
                 }
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"SavePrintSettingsToFile: Failed to save: {ex.GetType().Name} - {ex.Message}");
                     throw; // Re-throw to let caller handle
+                }
+            }
+        }
+
+        private static void WriteTextFileAtomically(string filePath, string content)
+        {
+            var fullPath = Path.GetFullPath(filePath);
+            var directory = Path.GetDirectoryName(fullPath);
+            if (string.IsNullOrWhiteSpace(directory))
+            {
+                throw new ArgumentException("The settings path must contain a file name.", nameof(filePath));
+            }
+
+            Directory.CreateDirectory(directory);
+            var temporaryPath = Path.Combine(directory, $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
+
+            try
+            {
+                File.WriteAllText(temporaryPath, content, Encoding.UTF8);
+                File.Move(temporaryPath, fullPath, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(temporaryPath))
+                {
+                    File.Delete(temporaryPath);
                 }
             }
         }
@@ -1996,6 +2172,11 @@ namespace Microsoft.Reporting.WinForms
         private void HandleSuccessfulSettingsConfiguration(PrinterSettings printerSettings, CustomPrintDialog printDialog)
         {
             PrinterSettings = printerSettings;
+            // Keep the in-memory settings in sync with the settings written to
+            // disk. The PrintLayout renderer prefers CustomPrintDialog, so
+            // leaving the previous instance here makes it render with stale
+            // margins after Printer & Page Settings is accepted.
+            CustomPrintDialog = printDialog;
 
             try
             {
@@ -2046,12 +2227,6 @@ namespace Microsoft.Reporting.WinForms
         /// </summary>
         public void SetPrinterAndPageSettings()
         {
-            if (PrintSettingFilePath == null)
-            {
-                MessageBox.Show("Print Setting File Path is not set");
-                return;
-            }
-
             try
             {
                 var pageSetting = GetPageSettings();
@@ -2076,6 +2251,16 @@ namespace Microsoft.Reporting.WinForms
                 if (dialogResult == DialogResult.OK)
                 {
                     var finalPrintSettings = new CustomPrintDialog(updatedDialog, CurrentReportPageSetting);
+                    // PageSetupDialog keeps the exact metric values in the
+                    // viewer's CustomPrintDialog. Preserve those values while
+                    // replacing the printer-selection fields from the outer
+                    // printer dialog.
+                    if (CustomPrintDialog?.CPageSettings != null)
+                    {
+                        finalPrintSettings.CPageSettings = CustomPrintDialog.CPageSettings.Clone();
+                        finalPrintSettings.PaperSize = finalPrintSettings.CPageSettings.PaperSize ?? finalPrintSettings.PaperSize;
+                        finalPrintSettings.Landscape = finalPrintSettings.CPageSettings.Landscape;
+                    }
                     HandleSuccessfulSettingsConfiguration(configuredSettings, finalPrintSettings);
                 }
             }
@@ -2089,76 +2274,82 @@ namespace Microsoft.Reporting.WinForms
         //Check For Error in DirectPrint by FrontLook
         public void DPrint()
         {
-            //check if print setting file exists
-            if (PrintSettingFilePath == null)
+            if (string.IsNullOrWhiteSpace(PrintSettingFilePath) || !File.Exists(PrintSettingFilePath))
             {
                 DefaultPrintMode();
+                return;
             }
-            else
+
+            var printSettingsTxt = File.ReadAllText(PrintSettingFilePath);
+            var printSettings = printSettingsTxt.FL_CastToClass<CustomPrintDialog>();
+            if (printSettings == null)
             {
-                if (File.Exists(PrintSettingFilePath))
-                {
-                    //var printerSettings = new PrinterSettings();
-                    bool DefaultPrint = false;
-                    var ps = new CustomPrintDialog();
-                    if (!File.Exists(PrintSettingFilePath))
-                    {
-                        DefaultPrint = true;
-
-                    }
-                    else
-                    {
-
-                        var printSettingsTxt = File.ReadAllText(PrintSettingFilePath);
-                        ps = printSettingsTxt.FL_CastToClass<CustomPrintDialog>();
-                    }
-
-                    if (ps == null || DefaultPrint)
-                    {
-                        DefaultPrintMode();
-                        //set default print settings
-                        ps = new CustomPrintDialog(PrinterSettings, GetPageSettings());
-                    }
-                    var printerSettings = ps.GetPrinterSettings();
-                    SetPageSettings(ps.CPageSettings.GetPageSettings());
-                    if (OnPrintingBegin(this, printerSettings))
-                    {
-                        string displayNameForUse = Report.DisplayNameForUse;
-                        if (CurrentReport.FileManager.Status == FileManagerStatus.Aborted || CurrentReport.FileManager.Status == FileManagerStatus.NotStarted)
-                        {
-                            bool flag = printerSettings.PrintRange == PrintRange.AllPages;
-                            int startPage;
-                            int endPage;
-                            if (!flag)
-                            {
-                                startPage = 1;
-                                endPage = printerSettings.ToPage;
-                            }
-                            else
-                            {
-                                startPage = 0;
-                                endPage = 0;
-                            }
-                            string deviceInfo = CreateEMFDeviceInfo(ps.CPageSettings, startPage, endPage);
-                            ProcessAsyncInvokes();
-                            BeginAsyncRender("IMAGE", allowInternalRenderers: true, deviceInfo, PageCountMode.Estimate, CreateStreamEMFPrintOnly, OnRenderingCompletePrintOnly, new PostRenderArgs(isDifferentReport: false, !flag), requireCompletionOnUIThread: false);
-                        }
-                        ReportPrintDocument reportPrintDocument = new ReportPrintDocument(CurrentReport.FileManager, (PageSettings)PageSettings.Clone());
-                        reportPrintDocument.DocumentName = displayNameForUse;
-                        reportPrintDocument.PrinterSettings = printerSettings;
-                        reportPrintDocument.Print();
-
-                        //clear winRSviewer 
-                        winRSviewer.SetNewPage(null);
-
-                    }
-                }
-                else
-                {
-                    DefaultPrintMode();
-                }
+                DefaultPrintMode();
+                return;
             }
 
+            var printerSettings = printSettings.GetPrinterSettings();
+
+            if (OnPrintingBegin(this, printerSettings))
+            {
+                var pageSettings = printSettings.CPageSettings?.GetPageSettings() ?? GetPageSettings();
+                if (printSettings.CPageSettings != null)
+                {
+                    SetPageSettings(pageSettings);
+                }
+
+                if (RenderPrintPages(printSettings.CPageSettings, printerSettings))
+                {
+                    PrintPreparedPages(printerSettings, pageSettings);
+                }
+
+                // Clear the cached print-only pages.
+                winRSviewer.SetNewPage(null);
+            }
+        }
+
+        private bool RenderPrintPages(CustomPageSetting customPageSettings, PrinterSettings printerSettings)
+        {
+            if (CurrentReport.FileManager.Status == FileManagerStatus.InProgress && !CancelAllRenderingRequests())
+            {
+                UpdateUIState(new InvalidOperationException("The report rendering operation did not finish before printing."));
+                return false;
+            }
+
+            // Print rendering must not reuse preview pages. The page cache also
+            // carries the previous report device information, including margins.
+            CurrentReport.FileManager.Clean();
+
+            bool allPages = printerSettings.PrintRange == PrintRange.AllPages;
+            int startPage = allPages ? 0 : 1;
+            int endPage = allPages ? 0 : printerSettings.ToPage;
+            string deviceInfo = customPageSettings != null
+                ? CreateEMFDeviceInfo(customPageSettings, startPage, endPage)
+                : CreateEMFDeviceInfo(startPage, endPage);
+
+            ProcessAsyncInvokes();
+            BeginAsyncRender(
+                "IMAGE",
+                allowInternalRenderers: true,
+                deviceInfo,
+                PageCountMode.Estimate,
+                CreateStreamEMFPrintOnly,
+                OnRenderingCompletePrintOnly,
+                new PostRenderArgs(isDifferentReport: false, isPartialRendering: !allPages),
+                requireCompletionOnUIThread: false);
+            return true;
+        }
+
+        private void PrintPreparedPages(PrinterSettings printerSettings, PageSettings pageSettings)
+        {
+            var printPageSettings = (PageSettings)pageSettings.Clone();
+            printPageSettings.PrinterSettings = printerSettings;
+            var reportPrintDocument = new ReportPrintDocument(CurrentReport.FileManager, printPageSettings)
+            {
+                DocumentName = Report.DisplayNameForUse,
+                PrinterSettings = printerSettings
+            };
+            reportPrintDocument.Print();
         }
 
         private void DefaultPrintMode()
@@ -2197,33 +2388,14 @@ namespace Microsoft.Reporting.WinForms
                 dialogResult = printDialog.ShowDialog(this);
                 if (dialogResult == DialogResult.OK)
                 {
-                    if (OnPrintingBegin(this, printerSettings))
+                    var selectedPrinterSettings = printDialog.PrinterSettings;
+                    if (OnPrintingBegin(this, selectedPrinterSettings))
                     {
-                        string displayNameForUse = Report.DisplayNameForUse;
-                        if (CurrentReport.FileManager.Status == FileManagerStatus.Aborted || CurrentReport.FileManager.Status == FileManagerStatus.NotStarted)
+                        var pageSettings = GetPageSettings();
+                        if (RenderPrintPages(null, selectedPrinterSettings))
                         {
-                            bool flag = printDialog.PrinterSettings.PrintRange == PrintRange.AllPages;
-                            int startPage;
-                            int endPage;
-                            if (!flag)
-                            {
-                                startPage = 1;
-                                endPage = printDialog.PrinterSettings.ToPage;
-                            }
-                            else
-                            {
-                                startPage = 0;
-                                endPage = 0;
-                            }
-                            string deviceInfo = CreateEMFDeviceInfo(startPage, endPage);
-                            ProcessAsyncInvokes();
-                            BeginAsyncRender("IMAGE", allowInternalRenderers: true, deviceInfo, PageCountMode.Estimate, CreateStreamEMFPrintOnly, OnRenderingCompletePrintOnly, new PostRenderArgs(isDifferentReport: false, !flag), requireCompletionOnUIThread: false);
+                            PrintPreparedPages(selectedPrinterSettings, pageSettings);
                         }
-                        ReportPrintDocument reportPrintDocument = new ReportPrintDocument(CurrentReport.FileManager, (PageSettings)PageSettings.Clone());
-                        reportPrintDocument.DocumentName = displayNameForUse;
-                        reportPrintDocument.PrinterSettings = printDialog.PrinterSettings;
-                        //SavePrintSetting(printDialog);
-                        reportPrintDocument.Print();
                         return dialogResult;
                     }
                     return dialogResult;
@@ -2289,9 +2461,13 @@ namespace Microsoft.Reporting.WinForms
             {
                 try
                 {
-                    CancelAllRenderingRequests();
+                    if (!CancelAllRenderingRequests())
+                    {
+                        UpdateUIState(new InvalidOperationException("The report rendering operation did not finish after cancellation."));
+                        return;
+                    }
                     CurrentReportPageSetting = pageSettings;
-                    RenderForPreview(new PostRenderArgs(isDifferentReport: true, isPartialRendering: false), invalidateCache: false);
+                    RenderForPreview(new PostRenderArgs(isDifferentReport: true, isPartialRendering: false), invalidateCache: true);
                 }
                 catch (ObjectDisposedException)
                 {
@@ -2304,7 +2480,9 @@ namespace Microsoft.Reporting.WinForms
             }
             else
             {
-                CurrentReport.PageSettings = pageSettings;
+                // Clear the report-default settings source so subsequent print
+                // device information comes from the user-selected settings.
+                CurrentReportPageSetting = pageSettings;
             }
         }
 
@@ -2320,7 +2498,11 @@ namespace Microsoft.Reporting.WinForms
                 }
             }
             m_searchState = null;
-            CancelAllRenderingRequests();
+            if (!CancelAllRenderingRequests())
+            {
+                UpdateUIState(new InvalidOperationException("The report rendering operation did not finish after cancellation."));
+                return;
+            }
             if (invalidateCache)
             {
                 CurrentReport.FileManager.Clean();
@@ -2353,6 +2535,10 @@ namespace Microsoft.Reporting.WinForms
         private void BeginAsyncRender(string format, bool allowInternalRenderers, string deviceInfo, PageCountMode pageCountMode, CreateAndRegisterStream createStreamCallback, AsyncCompletedEventHandler onCompleteCallback, PostRenderArgs postRenderArgs, bool requireCompletionOnUIThread)
         {
             AsyncReportOperation asyncReportOperation = (createStreamCallback != null) ? ((AsyncRenderingOperation)new AsyncAllStreamsRenderingOperation(Report, pageCountMode, format, deviceInfo, allowInternalRenderers, postRenderArgs, createStreamCallback)) : ((AsyncRenderingOperation)new AsyncMainStreamRenderingOperation(Report, pageCountMode, format, deviceInfo, allowInternalRenderers, postRenderArgs));
+            asyncReportOperation.Generation = Interlocked.Increment(ref m_renderGeneration);
+			asyncReportOperation.StartedAtUtc = DateTime.UtcNow;
+			NotifyRenderingProgress(new ReportRenderProgress(ReportRenderStage.Started, format, TimeSpan.Zero, null, null, "Report rendering started."));
+			NotifyRenderingProgress(new ReportRenderProgress(ReportRenderStage.Rendering, format, TimeSpan.Zero, null, null, "Report rendering is in progress."));
             asyncReportOperation.Completed += onCompleteCallback;
             if (requireCompletionOnUIThread)
             {
@@ -2392,6 +2578,125 @@ namespace Microsoft.Reporting.WinForms
                             <PageWidth>{ToInches(hundrethsOfInch)}</PageWidth>
                        </DeviceInfo>"
                        );
+        }
+
+        /// <summary>
+        /// Creates renderer device information for exports using the configured
+        /// paper size and exact metric margins.
+        /// </summary>
+        public static string CreateExportDeviceInfo(CustomPageSetting pageSetting)
+        {
+            if (pageSetting == null)
+            {
+                throw new ArgumentNullException(nameof(pageSetting));
+            }
+
+            var pageSettings = pageSetting.GetPageSettings();
+            if (pageSettings.PaperSize == null)
+            {
+                throw new InvalidOperationException("A paper size is required for export.");
+            }
+
+            pageSetting.GetMetricMargins(
+                out var leftMarginMillimeters,
+                out var rightMarginMillimeters,
+                out var topMarginMillimeters,
+                out var bottomMarginMillimeters);
+
+            int pageWidth = pageSettings.Landscape ? pageSettings.PaperSize.Height : pageSettings.PaperSize.Width;
+            int pageHeight = pageSettings.Landscape ? pageSettings.PaperSize.Width : pageSettings.PaperSize.Height;
+
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                @"<DeviceInfo>
+                    <StartPage>0</StartPage>
+                    <EndPage>0</EndPage>
+                    <MarginTop>{0}</MarginTop>
+                    <MarginLeft>{1}</MarginLeft>
+                    <MarginRight>{2}</MarginRight>
+                    <MarginBottom>{3}</MarginBottom>
+                    <PageHeight>{4}</PageHeight>
+                    <PageWidth>{5}</PageWidth>
+                </DeviceInfo>",
+                ToInches(topMarginMillimeters),
+                ToInches(leftMarginMillimeters),
+                ToInches(rightMarginMillimeters),
+                ToInches(bottomMarginMillimeters),
+                ToInches(pageHeight),
+                ToInches(pageWidth));
+        }
+
+        public static string CreateExportDeviceInfo(CustomPrintDialog printSettings)
+        {
+            if (printSettings == null)
+            {
+                throw new ArgumentNullException(nameof(printSettings));
+            }
+
+            var pageSetting = printSettings.CPageSettings?.Clone() ?? new CustomPageSetting
+            {
+                Landscape = printSettings.Landscape,
+                Margins = new Margins()
+            };
+            pageSetting.PaperSize ??= printSettings.PaperSize;
+            return CreateExportDeviceInfo(pageSetting);
+        }
+
+        private string CreateExportDeviceInfo()
+        {
+            if (CustomPrintDialog != null)
+            {
+                return CreateExportDeviceInfo(CustomPrintDialog);
+            }
+
+            if (m_reportPageSettings != null)
+            {
+                return string.Format(
+                    CultureInfo.InvariantCulture,
+                    @"<DeviceInfo>
+                        <StartPage>0</StartPage>
+                        <EndPage>0</EndPage>
+                        <MarginTop>{0}</MarginTop>
+                        <MarginLeft>{1}</MarginLeft>
+                        <MarginRight>{2}</MarginRight>
+                        <MarginBottom>{3}</MarginBottom>
+                        <PageHeight>{4}</PageHeight>
+                        <PageWidth>{5}</PageWidth>
+                    </DeviceInfo>",
+                    ToInches(m_reportPageSettings.TopMarginMillimeters),
+                    ToInches(m_reportPageSettings.LeftMarginMillimeters),
+                    ToInches(m_reportPageSettings.RightMarginMillimeters),
+                    ToInches(m_reportPageSettings.BottomMarginMillimeters),
+                    ToInches(m_reportPageSettings.PageHeightMillimeters),
+                    ToInches(m_reportPageSettings.PageWidthMillimeters));
+            }
+
+            var pageSettings = PageSettings;
+            if (pageSettings?.PaperSize == null)
+            {
+                return string.Empty;
+            }
+
+            int pageWidth = pageSettings.Landscape ? pageSettings.PaperSize.Height : pageSettings.PaperSize.Width;
+            int pageHeight = pageSettings.Landscape ? pageSettings.PaperSize.Width : pageSettings.PaperSize.Height;
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                @"<DeviceInfo>
+                    <StartPage>0</StartPage>
+                    <EndPage>0</EndPage>
+                    <MarginTop>{0}</MarginTop>
+                    <MarginLeft>{1}</MarginLeft>
+                    <MarginRight>{2}</MarginRight>
+                    <MarginBottom>{3}</MarginBottom>
+                    <PageHeight>{4}</PageHeight>
+                    <PageWidth>{5}</PageWidth>
+                </DeviceInfo>",
+                ToInches(pageSettings.Margins.Top),
+                ToInches(pageSettings.Margins.Left),
+                ToInches(pageSettings.Margins.Right),
+                ToInches(pageSettings.Margins.Bottom),
+                ToInches(pageHeight),
+                ToInches(pageWidth));
         }
 
         private string CreateEMFDeviceInfo(int startPage, int endPage)
@@ -2480,7 +2785,32 @@ namespace Microsoft.Reporting.WinForms
         protected override void Dispose(bool disposing)
         {
             m_disposing = true;
-            CancelAllRenderingRequests();
+            if (!CancelAllRenderingRequests())
+            {
+                // Do not dispose the report hierarchy while the worker can still access it.
+                CancelRendering(-1);
+            }
+
+            if (disposing)
+            {
+                m_autoRefreshTimer.Stop();
+                m_autoRefreshTimer.Tick -= OnRefresh;
+                m_autoRefreshTimer.Dispose();
+
+                if (m_asyncWaitControlTimer != null)
+                {
+                    m_asyncWaitControlTimer.Stop();
+                    m_asyncWaitControlTimer.Tick -= OnWaitPanelTimerTick;
+                    m_asyncWaitControlTimer.Dispose();
+                    m_asyncWaitControlTimer = null;
+                }
+
+                lock (m_pendingAsyncInvokes)
+                {
+                    m_pendingAsyncInvokes.Clear();
+                }
+            }
+
             m_reportHierarchy.Dispose();
             base.Dispose(disposing);
         }
@@ -2553,12 +2883,19 @@ namespace Microsoft.Reporting.WinForms
         {
             try
             {
-                CancelAllRenderingRequests();
+                if (!CancelAllRenderingRequests())
+                {
+                    UpdateUIState(new InvalidOperationException("The report rendering operation did not finish after cancellation."));
+                    return;
+                }
                 m_viewMode = mode;
                 ZoomPercent = 100;
                 ZoomMode = ((m_viewMode != DisplayMode.PrintLayout) ? ZoomMode.Percent : ZoomMode.FullPage);
                 CurrentReport.CurrentPage = 1;
-                RenderForPreview(new PostRenderArgs(isDifferentReport: true, isPartialRendering: false), invalidateCache: false);
+                var storedPrintSettingsApplied = mode == DisplayMode.PrintLayout && ApplyStoredPrintSettingsIfAvailable();
+                RenderForPreview(
+                    new PostRenderArgs(isDifferentReport: true, isPartialRendering: false),
+                    invalidateCache: storedPrintSettingsApplied);
             }
             catch (ObjectDisposedException)
             {
@@ -2567,6 +2904,57 @@ namespace Microsoft.Reporting.WinForms
             catch (Exception e)
             {
                 UpdateUIState(e);
+            }
+        }
+
+        private bool ApplyStoredPrintSettingsIfAvailable()
+        {
+            if (CustomPrintDialog != null || !File.Exists(PrintSettingFilePath))
+            {
+                return false;
+            }
+
+            try
+            {
+                var storedPrintSettings = LoadPrinterSettingsFromFile();
+                if (storedPrintSettings?.CPageSettings == null)
+                {
+                    return false;
+                }
+
+                var pageSettings = storedPrintSettings.GetPageSettings();
+                if (pageSettings == null)
+                {
+                    return false;
+                }
+
+                PrinterSettings printerSettings = null;
+                try
+                {
+                    printerSettings = storedPrintSettings.GetPrinterSettings();
+                }
+                catch (Exception exception)
+                {
+                    Debug.WriteLine($"ApplyStoredPrintSettingsIfAvailable: Could not restore printer settings: {exception.GetType().Name} - {exception.Message}");
+                }
+
+                CustomPrintDialog = storedPrintSettings;
+                if (printerSettings != null)
+                {
+                    PrinterSettings = printerSettings;
+                }
+
+                // CurrentReportPageSetting clears the report-derived page
+                // settings source. The next PrintLayout render therefore uses
+                // the persisted custom margins instead of the RDLC margins.
+                CurrentReportPageSetting = pageSettings;
+                MetricEnabled = true;
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Debug.WriteLine($"ApplyStoredPrintSettingsIfAvailable: Failed to apply stored settings: {exception.GetType().Name} - {exception.Message}");
+                return false;
             }
         }
 
@@ -2618,6 +3006,21 @@ namespace Microsoft.Reporting.WinForms
             {
                 throw new ArgumentOutOfRangeException("extension");
             }
+
+            // Export must use the same persisted page settings as PrintLayout.
+            // The toolbar normally passes null, but callers may provide the
+            // renderer's default device info, which would otherwise reintroduce
+            // the RDLC margins and ignore CPageSettings.
+            ApplyStoredPrintSettingsIfAvailable();
+            if (CustomPrintDialog?.CPageSettings != null)
+            {
+                deviceInfo = CreateExportDeviceInfo(CustomPrintDialog);
+            }
+            else if (string.IsNullOrWhiteSpace(deviceInfo))
+            {
+                deviceInfo = CreateExportDeviceInfo();
+            }
+
             ExportDialog exportDialog = new ExportDialog(this, extension, deviceInfo, fileName);
             exportDialog.Closed += ExportDialogClosed;
             exportDialog.Font = Font;
@@ -2639,7 +3042,10 @@ namespace Microsoft.Reporting.WinForms
             }
             var previousPageSettings = (PageSettings)PageSettings.Clone();
             var storedPrintSettings = LoadPrinterSettingsFromFile();
-            var customPageSetting = storedPrintSettings?.CPageSettings?.Clone() ?? new CustomPageSetting(previousPageSettings);
+            var customPageSetting = storedPrintSettings?.CPageSettings?.Clone()
+                ?? (storedPrintSettings == null
+                    ? new CustomPageSetting(previousPageSettings)
+                    : new CustomPageSetting(storedPrintSettings.GetPageSettings()));
             var printerSettings = PrinterSettings;
 
             try
@@ -2662,21 +3068,19 @@ namespace Microsoft.Reporting.WinForms
             }
 
             var selectedPageSettings = pageSetupDialog.PageSetting.GetPageSettings();
-            var pageSettingsChanged = ArePageSettingsDifferent(previousPageSettings, selectedPageSettings);
-
             CurrentReportPageSetting = selectedPageSettings;
             MetricEnabled = true;
             PrinterSettings = pageSetupDialog.PrinterSettings;
             UpdateCustomPrintDialog(pageSetupDialog.PageSetting);
 
-            if (pageSettingsChanged)
+            // Always invalidate and re-render after OK. Exact metric values
+            // such as 5.00 mm and 5.01 mm can map to the same GDI margin, but
+            // they still produce different renderer device information.
+            PageSettingsChanged?.Invoke(this, EventArgs.Empty);
+            CurrentReport.FileManager.Clean();
+            if (m_viewMode == DisplayMode.PrintLayout)
             {
-                PageSettingsChanged?.Invoke(this, EventArgs.Empty);
-                CurrentReport.FileManager.Clean();
-                if (m_viewMode == DisplayMode.PrintLayout)
-                {
-                    RenderForPreview(new PostRenderArgs(isDifferentReport: true, isPartialRendering: false), invalidateCache: false);
-                }
+                RenderForPreview(new PostRenderArgs(isDifferentReport: true, isPartialRendering: false), invalidateCache: false);
             }
 
             SavePrintSetting();
@@ -2694,15 +3098,6 @@ namespace Microsoft.Reporting.WinForms
             printDialog.Landscape = pageSetting.Landscape;
             printDialog.CPageSettings = pageSetting.Clone();
             CustomPrintDialog = printDialog;
-        }
-
-        private static bool ArePageSettingsDifferent(PageSettings first, PageSettings second)
-        {
-            return first.Margins.Left != second.Margins.Left ||
-                   first.Margins.Right != second.Margins.Right ||
-                   first.Margins.Top != second.Margins.Top ||
-                   first.Margins.Bottom != second.Margins.Bottom ||
-                   first.Bounds != second.Bounds;
         }
 
         private void CancelAutoRefreshTimer()

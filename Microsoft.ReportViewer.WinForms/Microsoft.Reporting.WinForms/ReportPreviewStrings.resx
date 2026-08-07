@@ -80,6 +80,8 @@
   <data name="FalseButtonLabel"><value>False</value></data>
   <data name="PageWidth"><value>Page Width</value></data>
   <data name="PrintMenuItemText"><value>&amp;Print</value></data>
+  <data name="DirectPrintMenuItemText"><value>Direct &amp;Print</value></data>
+  <data name="PrinterPageSettingsMenuItemText"><value>Printer &amp; Page Setup</value></data>
   <data name="BoolTooltip"><value>Parameter Type: Boolean</value></data>
   <data name="IntTooltip"><value>Parameter Type: Integer</value></data>
   <data name="ExportToolTipText"><value>Export</value></data>
