@@ -22,7 +22,8 @@ namespace ReportViewerCore
 
         public FL_RldcReportViewerForm(FL_IRdlcReport _reportCompiler)
         {
-            Text = "Report viewer";
+            Text = "Report Viewer";
+            Icon = ReportViewerBranding.CreateApplicationIcon();
             reportCompiler = _reportCompiler;
             WindowState = FormWindowState.Maximized;
             reportViewer = new ReportViewer();
@@ -32,7 +33,8 @@ namespace ReportViewerCore
 
         public FL_RldcReportViewerForm()
         {
-            Text = "Report viewer";
+            Text = "Report Viewer";
+            Icon = ReportViewerBranding.CreateApplicationIcon();
             WindowState = FormWindowState.Maximized;
             reportViewer = new ReportViewer();
             reportViewer.Dock = DockStyle.Fill;

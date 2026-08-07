@@ -128,6 +128,26 @@ namespace Microsoft.Reporting.WinForms
 
         internal ReportViewerTheme SelectedTheme => m_theme;
 
+        internal ToolStrip ToolStrip => toolStrip1;
+
+        internal void AddCustomItem(ToolStripItem item)
+        {
+            if (item == null)
+            {
+                throw new ArgumentNullException(nameof(item));
+            }
+
+            int insertIndex = toolStrip1.Items.IndexOf(themeButton);
+            if (insertIndex < 0)
+            {
+                toolStrip1.Items.Add(item);
+            }
+            else
+            {
+                toolStrip1.Items.Insert(insertIndex, item);
+            }
+        }
+
         public ReportToolBar()
         {
             InitializeComponent();
@@ -176,7 +196,7 @@ namespace Microsoft.Reporting.WinForms
             PrintDialog.ToolTipText = LocalizationHelper.Current.PrintButtonToolTip;
             printPreview.ToolTipText = LocalizationHelper.Current.PrintLayoutButtonToolTip;
             pageSetup.ToolTipText = LocalizationHelper.Current.PageSetupButtonToolTip;
-            DirectPrint.ToolTipText = LocalizationHelper.Current.PrintButtonToolTip;
+            DirectPrint.ToolTipText = GetDirectPrintText();
             printerPageSettings.ToolTipText = LocalizationHelper.Current.PageSetupButtonToolTip;
             export.ToolTipText = LocalizationHelper.Current.ExportButtonToolTip;
             themeButton.ToolTipText = "Change viewer theme";
@@ -186,7 +206,7 @@ namespace Microsoft.Reporting.WinForms
             find.ToolTipText = LocalizationHelper.Current.FindButtonToolTip;
             findNext.Text = LocalizationHelper.Current.FindNextButtonText;
             findNext.ToolTipText = LocalizationHelper.Current.FindNextButtonToolTip;
-            DirectPrint.AccessibleName = ReportPreviewStrings.PrintAccessibleName;
+            DirectPrint.AccessibleName = GetDirectPrintText();
             printerPageSettings.AccessibleName = ReportPreviewStrings.PageSetupAccessibleName;
         }
 
@@ -216,6 +236,12 @@ namespace Microsoft.Reporting.WinForms
         internal void SetToolStripRenderer(ToolStripRenderer renderer)
         {
             toolStrip1.Renderer = renderer;
+        }
+
+        private static string GetDirectPrintText()
+        {
+            string text = ReportPreviewStrings.DirectPrintMenuItemText;
+            return string.IsNullOrWhiteSpace(text) ? "Direct Print" : text.Replace("&", string.Empty);
         }
 
         internal void ApplyTheme(ReportViewerTheme theme, ToolStripRenderer renderer)
@@ -799,6 +825,11 @@ namespace Microsoft.Reporting.WinForms
 
             textToFind.TextBox.Focus();
             textToFind.TextBox.SelectAll();
+        }
+
+        internal void ClearSearchText()
+        {
+            textToFind.Text = string.Empty;
         }
 
         private void PopulateExportList()

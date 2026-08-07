@@ -13,6 +13,8 @@ namespace Microsoft.Reporting.WinForms
 
 		private Brush m_alphaFillBrush;
 
+		private Color m_overlayColor = Color.White;
+
 		public AlphaPanel(IRenderable background)
 		{
 			if (background == null)
@@ -33,7 +35,14 @@ namespace Microsoft.Reporting.WinForms
 			{
 				m_alphaFillBrush.Dispose();
 			}
-			m_alphaFillBrush = new SolidBrush(Color.FromArgb(Convert.ToInt32(m_opacity * 255.0), Color.White));
+			m_alphaFillBrush = new SolidBrush(Color.FromArgb(Convert.ToInt32(m_opacity * 255.0), m_overlayColor));
+		}
+
+		internal void ApplyTheme(Color overlayColor)
+		{
+			m_overlayColor = overlayColor;
+			SetAlphaFillBrush();
+			Invalidate();
 		}
 
 		protected override void Dispose(bool disposing)
@@ -47,7 +56,10 @@ namespace Microsoft.Reporting.WinForms
 
 		protected override void OnPaintBackground(PaintEventArgs e)
 		{
-			e.Graphics.FillRectangle(Brushes.White, e.ClipRectangle);
+			using (var brush = new SolidBrush(m_overlayColor))
+			{
+				e.Graphics.FillRectangle(brush, e.ClipRectangle);
+			}
 		}
 
 		protected override void OnPaint(PaintEventArgs e)
@@ -62,7 +74,10 @@ namespace Microsoft.Reporting.WinForms
 				}
 				catch
 				{
-					e.Graphics.FillRectangle(Brushes.White, base.ClientRectangle);
+					using (var brush = new SolidBrush(m_overlayColor))
+					{
+						e.Graphics.FillRectangle(brush, base.ClientRectangle);
+					}
 					return;
 				}
 				e.Graphics.FillRectangle(m_alphaFillBrush, base.ClientRectangle);

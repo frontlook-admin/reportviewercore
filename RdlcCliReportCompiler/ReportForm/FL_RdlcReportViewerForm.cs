@@ -20,7 +20,8 @@ namespace CliReportCompiler.ReportForm
 
         public FL_RdlcReportViewerForm()
         {
-            Text = "Report viewer";
+            Text = "Report Viewer";
+            Icon = ReportViewerBranding.CreateApplicationIcon();
             WindowState = FormWindowState.Maximized;
             reportViewer = new ReportViewer
             {
@@ -41,19 +42,18 @@ namespace CliReportCompiler.ReportForm
 
             LoadReport();
             ApplyStoredPrintSettings();
-            reportViewer.RefreshReport();
-            // Refresh once in Normal mode to prepare the report, then force a
-            // second refresh in PrintLayout. The second refresh must run after
-            // the custom settings are applied; otherwise a completed Normal
-            // render can be reused without the custom page geometry.
-            reportViewer.SetDisplayMode(DisplayMode.PrintLayout);
-            reportViewer.RefreshReport();
 
             if (reportCompiler.TriggerPrintSettings)
             {
                 ShowPrintSetup();
             }
-            else if (reportCompiler.TriggerPrint)
+
+            // Select PrintLayout only after setup is complete. This makes the
+            // first render use the final custom settings and prevents the
+            // setup dialog from cancelling a render that is still in flight.
+            reportViewer.SetDisplayMode(DisplayMode.PrintLayout);
+
+            if (reportCompiler.TriggerPrint)
             {
                 reportCompiler.TriggerPrint = false;
                 reportViewer.DPrint();
@@ -65,9 +65,7 @@ namespace CliReportCompiler.ReportForm
         {
             LoadReport();
             ApplyStoredPrintSettings();
-            reportViewer.RefreshReport();
             reportViewer.SetDisplayMode(DisplayMode.PrintLayout);
-            reportViewer.RefreshReport();
             reportViewer.DPrint();
         }
 
@@ -237,8 +235,6 @@ namespace CliReportCompiler.ReportForm
             {
                 File.WriteAllText(reportCompiler.PrintSettingFilePath, reportCompiler.PrintSettings.FL_CastToJson());
             }
-
-            reportViewer.RefreshReport();
         }
 
         private static void ApplyPageSettings(PrintDialog printDialog, PageSettings pageSetting)

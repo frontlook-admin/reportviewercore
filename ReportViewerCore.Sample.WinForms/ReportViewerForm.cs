@@ -12,7 +12,8 @@ namespace ReportViewerCore
 
 		public ReportViewerForm()
 		{
-			Text = "Report viewer";
+			Text = "Report Viewer";
+			Icon = ReportViewerBranding.CreateApplicationIcon();
 			WindowState = FormWindowState.Maximized;
 			reportViewer = new ReportViewer();
 			reportViewer.Dock = DockStyle.Fill;

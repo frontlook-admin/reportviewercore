@@ -48,13 +48,29 @@ namespace Microsoft.Reporting.WinForms
 			InitializeComponent();
 		}
 
+		internal void SetLoadingMessage(string text, bool custom)
+		{
+			m_waitMessage.SetLoadingMessage(text, custom);
+		}
+
+		internal void SetBranding(string text, bool visible, Image logo)
+		{
+			m_waitMessage.SetBranding(text, visible, logo);
+		}
+
+		internal void ApplyTheme(ReportViewerTheme theme)
+		{
+			base.ApplyTheme(theme.CanvasBackground);
+			m_waitMessage.ApplyTheme(theme);
+		}
+
 		private void InitializeComponent()
 		{
-			AutoSize = true;
+			AutoSize = false;
 			m_waitMessage = new Microsoft.Reporting.WinForms.AsyncWaitMessage();
-			m_waitMessage.AutoSize = true;
-			m_waitMessage.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-			m_waitMessage.BackColor = System.Drawing.SystemColors.Control;
+			m_waitMessage.AutoSize = false;
+			m_waitMessage.BorderStyle = System.Windows.Forms.BorderStyle.None;
+			m_waitMessage.BackColor = System.Drawing.Color.White;
 			base.Controls.Add(m_waitMessage);
 			m_waitMessage.CenterToParent();
 			Cursor = System.Windows.Forms.Cursors.WaitCursor;

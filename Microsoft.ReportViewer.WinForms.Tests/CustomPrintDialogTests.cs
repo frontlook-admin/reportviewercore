@@ -427,6 +427,176 @@ namespace Microsoft.ReportViewer.WinForms.Tests
         }
 
         [Fact]
+        public void ReportViewer_LoadingBranding_IsConfigurableAndSurvivesThemeChanges()
+        {
+            using var reportViewer = new ReportViewerControl();
+            using var logo = new Bitmap(16, 16);
+
+            reportViewer.LoadingMessage = "Preparing report...";
+            reportViewer.LoadingBrandText = "Powered By Incredible Informatics";
+            reportViewer.LoadingBrandLogo = logo;
+            reportViewer.ShowLoadingBrand = true;
+            reportViewer.Theme = ReportViewerTheme.Dark;
+
+            reportViewer.LoadingMessage.Should().Be("Preparing report...");
+            reportViewer.LoadingBrandText.Should().Be("Powered By Incredible Informatics");
+            reportViewer.LoadingBrandLogo.Should().BeSameAs(logo);
+            reportViewer.ShowLoadingBrand.Should().BeTrue();
+            reportViewer.Theme.Should().BeSameAs(ReportViewerTheme.Dark);
+
+            reportViewer.ShowLoadingBrand = false;
+            reportViewer.LoadingBrandLogo.Should().BeSameAs(logo);
+        }
+
+        [Fact]
+        public void ReportViewer_DefaultLoadingBranding_UsesIncredibleInformaticsTextWithoutLogo()
+        {
+            using var reportViewer = new ReportViewerControl();
+
+            reportViewer.LoadingBrandText.Should().Be("Powered By Incredible Informatics");
+            reportViewer.LoadingBrandLogo.Should().BeNull();
+            reportViewer.ShowLoadingBrand.Should().BeTrue();
+        }
+
+        [Fact]
+        public void ReportViewer_DefaultWaitControlAppearsImmediatelyAndRemainsConfigurable()
+        {
+            using var reportViewer = new ReportViewerControl();
+
+            reportViewer.WaitControlDisplayAfter.Should().Be(0);
+
+            reportViewer.WaitControlDisplayAfter = 750;
+
+            reportViewer.WaitControlDisplayAfter.Should().Be(750);
+        }
+
+        [Fact]
+        public void ReportViewerBranding_CreatesApplicationIcon()
+        {
+            using var icon = ReportViewerBranding.CreateApplicationIcon();
+            using var bitmap = icon.ToBitmap();
+
+            bitmap.Width.Should().Be(32);
+            bitmap.Height.Should().Be(32);
+        }
+
+        [Fact]
+        public void ReportViewer_ThemeChange_IsPersistedToConfiguredPreferencesFile()
+        {
+            var filePath = Path.Combine(Path.GetTempPath(), $"rdlc-theme-preferences-{Guid.NewGuid():N}.json");
+            try
+            {
+                using var reportViewer = new ReportViewerControl
+                {
+                    PreferencesFilePath = filePath
+                };
+
+                reportViewer.Theme = ReportViewerTheme.Dark;
+
+                File.Exists(filePath).Should().BeTrue();
+                File.ReadAllText(filePath).Should().Contain("\"Theme\": 1");
+            }
+            finally
+            {
+                if (File.Exists(filePath))
+                {
+                    File.Delete(filePath);
+                }
+            }
+        }
+
+        [Fact]
+        public void ReportViewer_LoadsPersistedThemeDuringControlStartup()
+        {
+            var filePath = Path.Combine(Path.GetTempPath(), $"rdlc-theme-startup-{Guid.NewGuid():N}.json");
+            try
+            {
+                using (var source = new ReportViewerControl
+                {
+                    PreferencesFilePath = filePath
+                })
+                {
+                    source.Theme = ReportViewerTheme.Dark;
+                }
+
+                using var restored = new LoadableReportViewer
+                {
+                    PreferencesFilePath = filePath
+                };
+
+                restored.TriggerLoad();
+
+                restored.Theme.Should().BeSameAs(ReportViewerTheme.Dark);
+            }
+            finally
+            {
+                if (File.Exists(filePath))
+                {
+                    File.Delete(filePath);
+                }
+            }
+        }
+
+        [Fact]
+        public void ReportViewer_PreferencesRoundTripViewerLayout()
+        {
+            string filePath = Path.Combine(Path.GetTempPath(), $"rdlc-viewer-preferences-{Guid.NewGuid():N}.json");
+            try
+            {
+                using var source = new ReportViewerControl
+                {
+                    PreferencesFilePath = filePath,
+                    Theme = ReportViewerTheme.Dark,
+                    ZoomMode = ZoomMode.PageWidth,
+                    ZoomPercent = 135,
+                    ShowStatusBar = false,
+                    ShowFindControls = false,
+                    DocumentMapCollapsed = true,
+                    DocumentMapWidth = 180
+                };
+
+                source.SavePreferences();
+
+                using var restored = new ReportViewerControl
+                {
+                    PreferencesFilePath = filePath
+                };
+
+                restored.LoadPreferences().Should().BeTrue();
+                restored.Theme.Should().BeSameAs(ReportViewerTheme.Dark);
+                restored.ZoomMode.Should().Be(ZoomMode.PageWidth);
+                restored.ZoomPercent.Should().Be(135);
+                restored.ShowStatusBar.Should().BeFalse();
+                restored.ShowFindControls.Should().BeFalse();
+                restored.DocumentMapCollapsed.Should().BeTrue();
+                restored.DocumentMapWidth.Should().Be(180);
+            }
+            finally
+            {
+                if (File.Exists(filePath))
+                {
+                    File.Delete(filePath);
+                }
+            }
+        }
+
+        [Fact]
+        public void ReportViewer_CanAddApplicationToolbarButton()
+        {
+            using var reportViewer = new ReportViewerControl();
+            bool clicked = false;
+
+            var button = reportViewer.AddToolbarButton(
+                "applicationAction",
+                "Application action",
+                (_, _) => clicked = true);
+
+            reportViewer.Toolbar.Items.Contains(button).Should().BeTrue();
+            button.PerformClick();
+            clicked.Should().BeTrue();
+        }
+
+        [Fact]
         public void ReportViewer_StatusBarCanBeToggled()
         {
             using var reportViewer = new ReportViewerControl
@@ -652,6 +822,14 @@ namespace Microsoft.ReportViewer.WinForms.Tests
 
             // Assert
             dialog.PrintType.Should().Be(PrintType.Mod);
+        }
+
+        private sealed class LoadableReportViewer : ReportViewerControl
+        {
+            public void TriggerLoad()
+            {
+                OnLoad(EventArgs.Empty);
+            }
         }
     }
 }

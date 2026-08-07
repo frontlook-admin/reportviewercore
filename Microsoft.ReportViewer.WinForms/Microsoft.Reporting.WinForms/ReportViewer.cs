@@ -15,6 +15,8 @@ using System.Drawing.Printing;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
+using CancellationToken = System.Threading.CancellationToken;
 using Interlocked = System.Threading.Interlocked;
 using Volatile = System.Threading.Volatile;
 using System.Windows.Forms;
@@ -93,7 +95,7 @@ namespace Microsoft.Reporting.WinForms
 
         private Timer m_asyncWaitControlTimer;
 
-        private int m_waitControlDisplayAfter = 1000;
+        private int m_waitControlDisplayAfter;
 
         private bool m_canRenderForWaitControl;
 
@@ -123,6 +125,16 @@ namespace Microsoft.Reporting.WinForms
 
         private string m_printSettingFilePath;
 
+        private string m_preferencesFilePath;
+
+        private Exception m_lastError;
+
+        private TimeSpan? m_lastRenderDuration;
+
+        private PrinterSettings m_pendingPrintPrinterSettings;
+
+        private PageSettings m_pendingPrintPageSettings;
+
         private const int RenderingCancellationTimeoutMilliseconds = 5000;
 
         private long m_renderGeneration;
@@ -132,6 +144,20 @@ namespace Microsoft.Reporting.WinForms
         private Queue<MethodInvoker> m_pendingAsyncInvokes = new Queue<MethodInvoker>();
 
         private ReportViewerTheme m_theme = ReportViewerTheme.Light;
+
+        private string m_loadingMessage;
+
+        private bool m_loadingMessageCustomized;
+
+        private string m_loadingBrandText = "Powered By Incredible Informatics";
+
+        private System.Drawing.Image m_loadingBrandLogo;
+
+        private bool m_showLoadingBrand = true;
+
+        private bool m_preferencesLoaded;
+
+        private bool m_preferencePersistenceSuppressed;
 
         private ToolStripRenderer m_toolStripRenderer = new ModernReportToolStripRenderer();
 
@@ -197,7 +223,86 @@ namespace Microsoft.Reporting.WinForms
             {
                 m_theme = value ?? ReportViewerTheme.Light;
                 ApplyTheme();
+                PersistThemePreference();
             }
+        }
+
+        [Category("Appearance")]
+        [Description("Text shown while the report is loading.")]
+        [DefaultValue(null)]
+        public string LoadingMessage
+        {
+            get
+            {
+                return m_loadingMessage;
+            }
+            set
+            {
+                m_loadingMessage = value;
+                m_loadingMessageCustomized = !string.IsNullOrWhiteSpace(value);
+                if (m_asyncWaitControl != null)
+                {
+                    m_asyncWaitControl.SetLoadingMessage(value, m_loadingMessageCustomized);
+                }
+            }
+        }
+
+        [Category("Appearance")]
+        [Description("Brand text shown in the report loading card.")]
+        [DefaultValue("Powered By Incredible Informatics")]
+        public string LoadingBrandText
+        {
+            get
+            {
+                return m_loadingBrandText;
+            }
+            set
+            {
+                m_loadingBrandText = value ?? string.Empty;
+                ApplyLoadingBranding();
+            }
+        }
+
+        [Category("Appearance")]
+        [Description("Logo shown in the report loading card. The caller owns the image and remains responsible for disposing it.")]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public System.Drawing.Image LoadingBrandLogo
+        {
+            get
+            {
+                return m_loadingBrandLogo;
+            }
+            set
+            {
+                m_loadingBrandLogo = value;
+                ApplyLoadingBranding();
+            }
+        }
+
+        [Category("Appearance")]
+        [Description("Shows or hides the loading card branding.")]
+        [DefaultValue(true)]
+        public bool ShowLoadingBrand
+        {
+            get
+            {
+                return m_showLoadingBrand;
+            }
+            set
+            {
+                m_showLoadingBrand = value;
+                ApplyLoadingBranding();
+            }
+        }
+
+        [Browsable(true)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public string PreferencesFilePath
+        {
+            get => string.IsNullOrWhiteSpace(m_preferencesFilePath)
+                ? GetDefaultPreferencesFilePath()
+                : m_preferencesFilePath;
+            set => m_preferencesFilePath = value;
         }
 
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -376,7 +481,7 @@ namespace Microsoft.Reporting.WinForms
         }
 
         [SRDescription("WaitControlDisplayAfterDesc")]
-        [DefaultValue(1000)]
+        [DefaultValue(0)]
         public int WaitControlDisplayAfter
         {
             get
@@ -719,6 +824,48 @@ namespace Microsoft.Reporting.WinForms
             }
         }
 
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public ToolStrip Toolbar => reportToolBar.ToolStrip;
+
+        /// <summary>
+        /// Adds an application-owned button immediately before the built-in theme menu.
+        /// The caller owns the supplied image and is responsible for disposing it.
+        /// </summary>
+        public ToolStripButton AddToolbarButton(string name, string text, EventHandler click, System.Drawing.Image image = null)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                throw new ArgumentException("A toolbar button name is required.", nameof(name));
+            }
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                throw new ArgumentException("Toolbar button text is required.", nameof(text));
+            }
+            if (click == null)
+            {
+                throw new ArgumentNullException(nameof(click));
+            }
+            if (Toolbar.Items.ContainsKey(name))
+            {
+                throw new ArgumentException($"A toolbar item named '{name}' already exists.", nameof(name));
+            }
+
+            var button = new ToolStripButton(text)
+            {
+                Name = name,
+                Image = image,
+                DisplayStyle = image == null
+                    ? ToolStripItemDisplayStyle.Text
+                    : ToolStripItemDisplayStyle.ImageAndText,
+                ToolTipText = text,
+                AccessibleName = text
+            };
+            button.Click += click;
+            reportToolBar.AddCustomItem(button);
+            return button;
+        }
+
         private void ApplyTheme()
         {
             if (reportToolBar == null || winRSviewer == null)
@@ -742,7 +889,24 @@ namespace Microsoft.Reporting.WinForms
             statusProgress.ForeColor = m_theme.Accent;
             statusZoom.ForeColor = m_theme.Foreground;
             reportToolBar.ApplyTheme(m_theme, m_toolStripRenderer);
+            m_asyncWaitControl.ApplyTheme(m_theme);
+            ApplyLoadingBranding();
             winRSviewer.ApplyTheme(m_theme, m_toolStripRenderer);
+        }
+
+        private void ApplyLoadingBranding()
+        {
+            if (m_asyncWaitControl == null)
+            {
+                return;
+            }
+
+            if (m_loadingMessageCustomized)
+            {
+                m_asyncWaitControl.SetLoadingMessage(m_loadingMessage, custom: true);
+            }
+
+            m_asyncWaitControl.SetBranding(m_loadingBrandText, m_showLoadingBrand, m_loadingBrandLogo);
         }
 
         [Browsable(false)]
@@ -825,6 +989,28 @@ namespace Microsoft.Reporting.WinForms
             }
         }
 
+        [Browsable(false)]
+        public string SearchText => m_searchState?.Text;
+
+        [Browsable(false)]
+        public Exception LastError => m_lastError;
+
+        [Browsable(false)]
+        public TimeSpan? LastRenderDuration => m_lastRenderDuration;
+
+        public void ClearSearch()
+        {
+            if (m_reportHierarchy.Count == 0)
+            {
+                return;
+            }
+
+            CurrentReport.GdiRenderer?.ClearSearchResults();
+            m_searchState = null;
+            reportToolBar.ClearSearchText();
+            UpdateUIState(m_lastUIState);
+        }
+
         private PageSettings PageSettings
         {
             get
@@ -880,6 +1066,8 @@ namespace Microsoft.Reporting.WinForms
 
         [SRDescription("PrintingBegingEventDesc")]
         public event ReportPrintEventHandler PrintingBegin;
+
+        public event EventHandler<ReportPrintCompletedEventArgs> PrintCompleted;
 
         [SRDescription("BackEventDesc")]
         public event BackEventHandler Back;
@@ -961,6 +1149,20 @@ namespace Microsoft.Reporting.WinForms
             Keys key = keyData & Keys.KeyCode;
             Keys modifiers = keyData & Keys.Modifiers;
 
+            if ((modifiers & Keys.Control) == Keys.Control && key == Keys.P)
+            {
+                if ((modifiers & Keys.Shift) == Keys.Shift)
+                {
+                    DPrint();
+                }
+                else
+                {
+                    PrintDialog();
+                }
+
+                return true;
+            }
+
             if (modifiers == Keys.Control)
             {
                 if (key == Keys.Add || key == Keys.Oemplus)
@@ -1015,6 +1217,12 @@ namespace Microsoft.Reporting.WinForms
                 if (key == Keys.F5)
                 {
                     RefreshReport();
+                    return true;
+                }
+
+                if (key == Keys.Escape && SearchState != null)
+                {
+                    ClearSearch();
                     return true;
                 }
 
@@ -1289,6 +1497,12 @@ namespace Microsoft.Reporting.WinForms
         {
             try
             {
+                if (string.IsNullOrWhiteSpace(se.SearchString))
+                {
+                    ClearSearch();
+                    return;
+                }
+
                 if (this.Search != null)
                 {
                     this.Search(this, se);
@@ -1317,6 +1531,7 @@ namespace Microsoft.Reporting.WinForms
 
         private bool OnError(Exception e)
         {
+            m_lastError = e;
             if (this.ReportError != null)
             {
                 ReportErrorEventArgs reportErrorEventArgs = new ReportErrorEventArgs(e);
@@ -1337,6 +1552,27 @@ namespace Microsoft.Reporting.WinForms
 
         private void OnRenderingProgress(object sender, ReportRenderProgress progress)
         {
+            if (progress == null)
+            {
+                return;
+            }
+
+            if (progress.Stage == ReportRenderStage.Started)
+            {
+                m_lastError = null;
+                m_lastRenderDuration = null;
+            }
+            else if (progress.Stage == ReportRenderStage.Completed
+                || progress.Stage == ReportRenderStage.Cancelled
+                || progress.Stage == ReportRenderStage.Failed)
+            {
+                m_lastRenderDuration = progress.Elapsed;
+                if (progress.Error != null)
+                {
+                    m_lastError = progress.Error;
+                }
+            }
+
             if (reportStatusStrip == null || IsDisposed)
             {
                 return;
@@ -1430,10 +1666,9 @@ namespace Microsoft.Reporting.WinForms
         {
             dmSplitContainer.SuspendLayout();
             rsDocMap.Enabled = !visible;
-            rsDocMap.BackColor = (visible ? SystemColors.Control : SystemColors.Window);
+            rsDocMap.BackColor = visible ? m_theme.CanvasBackground : m_theme.InputBackground;
             if (visible)
             {
-                m_asyncWaitControl.Font = new Font(Font.FontFamily, Font.Size * 1.75f, FontStyle.Bold | Font.Style);
                 m_asyncWaitControl.BringToFront();
             }
             m_asyncWaitControl.Visible = visible;
@@ -2057,6 +2292,7 @@ namespace Microsoft.Reporting.WinForms
         {
             if (m_disposing || ((AsyncRenderingOperation)sender).Generation != Volatile.Read(ref m_renderGeneration))
             {
+                ClearPendingPrint();
                 return;
             }
 
@@ -2070,6 +2306,24 @@ namespace Microsoft.Reporting.WinForms
             }
 
 			NotifyRenderingProgress((AsyncRenderingOperation)sender, args);
+
+            PrinterSettings printerSettings = m_pendingPrintPrinterSettings;
+            PageSettings pageSettings = m_pendingPrintPageSettings;
+            ClearPendingPrint();
+            if (args.Error != null || printerSettings == null || pageSettings == null)
+            {
+                return;
+            }
+
+            try
+            {
+                PrintPreparedPages(printerSettings, pageSettings);
+                PrintCompleted?.Invoke(this, new ReportPrintCompletedEventArgs(printerSettings, pageSettings));
+            }
+            catch (Exception exception)
+            {
+                UpdateUIState(exception);
+            }
         }
 
         private void OnAsyncLoadCompleted(object sender, AsyncCompletedEventArgs args)
@@ -2298,6 +2552,126 @@ namespace Microsoft.Reporting.WinForms
         {
             var safeReportName = GetSafePrintSettingReportName(reportName);
             return Path.Combine(AppContext.BaseDirectory, "RdlcPrintSetting", $"{safeReportName}.json");
+        }
+
+        public static string GetDefaultPreferencesFilePath()
+        {
+            string localApplicationData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrWhiteSpace(localApplicationData))
+            {
+                localApplicationData = AppContext.BaseDirectory;
+            }
+
+            return Path.Combine(localApplicationData, "FrontLook", "RdlcViewer", "ViewerPreferences.json");
+        }
+
+        public ReportViewerPreferences CapturePreferences()
+        {
+            return new ReportViewerPreferences
+            {
+                Theme = GetThemeKind(),
+                ZoomMode = ZoomMode,
+                ZoomPercent = ZoomPercent,
+                ShowToolBar = ShowToolBar,
+                ShowStatusBar = ShowStatusBar,
+                ShowProgress = ShowProgress,
+                ShowContextMenu = ShowContextMenu,
+                ShowParameterPrompts = ShowParameterPrompts,
+                ShowCredentialPrompts = ShowCredentialPrompts,
+                PromptAreaCollapsed = PromptAreaCollapsed,
+                DocumentMapCollapsed = DocumentMapCollapsed,
+                DocumentMapWidth = DocumentMapWidth,
+                IsDocumentMapWidthFixed = IsDocumentMapWidthFixed,
+                ShowDocumentMapButton = ShowDocumentMapButton,
+                ShowPromptAreaButton = ShowPromptAreaButton,
+                ShowPageNavigationControls = ShowPageNavigationControls,
+                ShowBackButton = ShowBackButton,
+                ShowStopButton = ShowStopButton,
+                ShowRefreshButton = ShowRefreshButton,
+                ShowPrintButton = ShowPrintButton,
+                ShowExportButton = ShowExportButton,
+                ShowZoomControl = ShowZoomControl,
+                ShowFindControls = ShowFindControls
+            };
+        }
+
+        public void ApplyPreferences(ReportViewerPreferences preferences)
+        {
+            if (preferences == null)
+            {
+                throw new ArgumentNullException(nameof(preferences));
+            }
+
+            bool previousSuppression = m_preferencePersistenceSuppressed;
+            m_preferencePersistenceSuppressed = true;
+            try
+            {
+                Theme = preferences.Theme switch
+                {
+                    ReportViewerThemeKind.Dark => ReportViewerTheme.Dark,
+                    ReportViewerThemeKind.HighContrast => ReportViewerTheme.HighContrast,
+                    _ => ReportViewerTheme.Light
+                };
+                ZoomPercent = Math.Max(10, Math.Min(400, preferences.ZoomPercent));
+                ZoomMode = preferences.ZoomMode;
+                ShowToolBar = preferences.ShowToolBar;
+                ShowStatusBar = preferences.ShowStatusBar;
+                ShowProgress = preferences.ShowProgress;
+                ShowContextMenu = preferences.ShowContextMenu;
+                ShowParameterPrompts = preferences.ShowParameterPrompts;
+                ShowCredentialPrompts = preferences.ShowCredentialPrompts;
+                PromptAreaCollapsed = preferences.PromptAreaCollapsed;
+                DocumentMapCollapsed = preferences.DocumentMapCollapsed;
+                if (preferences.DocumentMapWidth > 0)
+                {
+                    DocumentMapWidth = preferences.DocumentMapWidth;
+                }
+                IsDocumentMapWidthFixed = preferences.IsDocumentMapWidthFixed;
+                ShowDocumentMapButton = preferences.ShowDocumentMapButton;
+                ShowPromptAreaButton = preferences.ShowPromptAreaButton;
+                ShowPageNavigationControls = preferences.ShowPageNavigationControls;
+                ShowBackButton = preferences.ShowBackButton;
+                ShowStopButton = preferences.ShowStopButton;
+                ShowRefreshButton = preferences.ShowRefreshButton;
+                ShowPrintButton = preferences.ShowPrintButton;
+                ShowExportButton = preferences.ShowExportButton;
+                ShowZoomControl = preferences.ShowZoomControl;
+                ShowFindControls = preferences.ShowFindControls;
+            }
+            finally
+            {
+                m_preferencePersistenceSuppressed = previousSuppression;
+            }
+        }
+
+        public void SavePreferences()
+        {
+            WriteTextFileAtomically(PreferencesFilePath, CapturePreferences().ToJson());
+        }
+
+        public bool LoadPreferences()
+        {
+            if (!File.Exists(PreferencesFilePath))
+            {
+                return false;
+            }
+
+            ApplyPreferences(ReportViewerPreferences.Read(PreferencesFilePath));
+            return true;
+        }
+
+        private ReportViewerThemeKind GetThemeKind()
+        {
+            if (ReferenceEquals(Theme, ReportViewerTheme.Dark))
+            {
+                return ReportViewerThemeKind.Dark;
+            }
+            if (ReferenceEquals(Theme, ReportViewerTheme.HighContrast))
+            {
+                return ReportViewerThemeKind.HighContrast;
+            }
+
+            return ReportViewerThemeKind.Light;
         }
 
         private string GetDefaultPrintSettingFilePathForCurrentReport()
@@ -2579,9 +2953,10 @@ namespace Microsoft.Reporting.WinForms
                     SetPageSettings(pageSettings);
                 }
 
-                if (RenderPrintPages(printSettings.CPageSettings, printerSettings))
+                QueuePrintAfterRender(printerSettings, pageSettings);
+                if (!RenderPrintPages(printSettings.CPageSettings, printerSettings))
                 {
-                    PrintPreparedPages(printerSettings, pageSettings);
+                    ClearPendingPrint();
                 }
 
                 // Clear the cached print-only pages.
@@ -2608,17 +2983,37 @@ namespace Microsoft.Reporting.WinForms
                 ? CreateEMFDeviceInfo(customPageSettings, startPage, endPage)
                 : CreateEMFDeviceInfo(startPage, endPage);
 
-            ProcessAsyncInvokes();
-            BeginAsyncRender(
-                "IMAGE",
-                allowInternalRenderers: true,
-                deviceInfo,
-                PageCountMode.Estimate,
-                CreateStreamEMFPrintOnly,
-                OnRenderingCompletePrintOnly,
-                new PostRenderArgs(isDifferentReport: false, isPartialRendering: !allPages),
-                requireCompletionOnUIThread: false);
-            return true;
+            try
+            {
+                ProcessAsyncInvokes();
+                BeginAsyncRender(
+                    "IMAGE",
+                    allowInternalRenderers: true,
+                    deviceInfo,
+                    PageCountMode.Estimate,
+                    CreateStreamEMFPrintOnly,
+                    OnRenderingCompletePrintOnly,
+                    new PostRenderArgs(isDifferentReport: false, isPartialRendering: !allPages),
+                    requireCompletionOnUIThread: true);
+                return true;
+            }
+            catch
+            {
+                ClearPendingPrint();
+                throw;
+            }
+        }
+
+        private void QueuePrintAfterRender(PrinterSettings printerSettings, PageSettings pageSettings)
+        {
+            m_pendingPrintPrinterSettings = printerSettings;
+            m_pendingPrintPageSettings = (PageSettings)pageSettings.Clone();
+        }
+
+        private void ClearPendingPrint()
+        {
+            m_pendingPrintPrinterSettings = null;
+            m_pendingPrintPageSettings = null;
         }
 
         private void PrintPreparedPages(PrinterSettings printerSettings, PageSettings pageSettings)
@@ -2673,9 +3068,10 @@ namespace Microsoft.Reporting.WinForms
                     if (OnPrintingBegin(this, selectedPrinterSettings))
                     {
                         var pageSettings = GetPageSettings();
-                        if (RenderPrintPages(null, selectedPrinterSettings))
+                        QueuePrintAfterRender(selectedPrinterSettings, pageSettings);
+                        if (!RenderPrintPages(null, selectedPrinterSettings))
                         {
-                            PrintPreparedPages(selectedPrinterSettings, pageSettings);
+                            ClearPendingPrint();
                         }
                         return dialogResult;
                     }
@@ -3066,6 +3462,7 @@ namespace Microsoft.Reporting.WinForms
         protected override void Dispose(bool disposing)
         {
             m_disposing = true;
+            ClearPendingPrint();
             if (!CancelAllRenderingRequests())
             {
                 // Do not dispose the report hierarchy while the worker can still access it.
@@ -3143,8 +3540,55 @@ namespace Microsoft.Reporting.WinForms
             if (!base.DesignMode)
             {
                 ApplySplitterResources(allResources: true);
+                LoadPreferencesAtStartup();
             }
             base.OnLoad(e);
+        }
+
+        private void LoadPreferencesAtStartup()
+        {
+            if (m_preferencesLoaded)
+            {
+                return;
+            }
+
+            m_preferencesLoaded = true;
+            if (!File.Exists(PreferencesFilePath))
+            {
+                return;
+            }
+
+            bool previousSuppression = m_preferencePersistenceSuppressed;
+            m_preferencePersistenceSuppressed = true;
+            try
+            {
+                ApplyPreferences(ReportViewerPreferences.Read(PreferencesFilePath));
+            }
+            catch (Exception exception)
+            {
+                Debug.WriteLine($"ReportViewer.LoadPreferences: {exception.GetType().Name} - {exception.Message}");
+            }
+            finally
+            {
+                m_preferencePersistenceSuppressed = previousSuppression;
+            }
+        }
+
+        private void PersistThemePreference()
+        {
+            if (m_preferencePersistenceSuppressed || m_disposing)
+            {
+                return;
+            }
+
+            try
+            {
+                SavePreferences();
+            }
+            catch (Exception exception)
+            {
+                Debug.WriteLine($"ReportViewer.SavePreferences: {exception.GetType().Name} - {exception.Message}");
+            }
         }
 
         private void ApplySplitterResources(bool allResources)
@@ -3306,6 +3750,137 @@ namespace Microsoft.Reporting.WinForms
             exportDialog.Closed += ExportDialogClosed;
             exportDialog.Font = Font;
             return exportDialog.ShowDialog(this);
+        }
+
+        public Task<ReportExportResult> ExportToFileAsync(
+            RenderingExtension extension,
+            string filePath,
+            string deviceInfo = null,
+            CancellationToken cancellationToken = default,
+            IProgress<ReportRenderProgress> progress = null)
+        {
+            if (extension == null)
+            {
+                throw new ArgumentNullException(nameof(extension));
+            }
+
+            return ExportToFileAsyncCore(extension.Name, filePath, deviceInfo, cancellationToken, progress);
+        }
+
+        public Task<ReportExportResult> ExportToFileAsync(
+            string format,
+            string filePath,
+            string deviceInfo = null,
+            CancellationToken cancellationToken = default,
+            IProgress<ReportRenderProgress> progress = null)
+        {
+            if (string.IsNullOrWhiteSpace(format))
+            {
+                throw new ArgumentException("An export format is required.", nameof(format));
+            }
+
+            return ExportToFileAsyncCore(format, filePath, deviceInfo, cancellationToken, progress);
+        }
+
+        private async Task<ReportExportResult> ExportToFileAsyncCore(
+            string format,
+            string filePath,
+            string deviceInfo,
+            CancellationToken cancellationToken,
+            IProgress<ReportRenderProgress> progress)
+        {
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                throw new ArgumentException("An export output path is required.", nameof(filePath));
+            }
+            if (!ReportViewerStatus.DoesStateAllowExport(m_lastUIState))
+            {
+                throw new InvalidOperationException("The report is not ready for export.");
+            }
+
+            RenderingExtension extension = FindRenderingExtension(format);
+            var exportArgs = new ReportExportEventArgs(extension)
+            {
+                DeviceInfo = deviceInfo
+            };
+            ReportExport?.Invoke(this, exportArgs);
+            if (exportArgs.Cancel)
+            {
+                throw new OperationCanceledException("The export was cancelled.", cancellationToken);
+            }
+
+            ApplyStoredPrintSettingsIfAvailable();
+            if (CustomPrintDialog?.CPageSettings != null)
+            {
+                deviceInfo = CreateExportDeviceInfo(CustomPrintDialog);
+            }
+            else if (string.IsNullOrWhiteSpace(exportArgs.DeviceInfo))
+            {
+                deviceInfo = CreateExportDeviceInfo();
+            }
+            else
+            {
+                deviceInfo = exportArgs.DeviceInfo;
+            }
+
+            string fullPath = Path.GetFullPath(filePath);
+            string directory = Path.GetDirectoryName(fullPath);
+            if (string.IsNullOrWhiteSpace(directory))
+            {
+                throw new ArgumentException("The export path must include a file name.", nameof(filePath));
+            }
+
+            Directory.CreateDirectory(directory);
+            string temporaryPath = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                byte[] bytes = await Report.RenderAsync(
+                    extension.Name,
+                    deviceInfo,
+                    PageCountMode.Actual,
+                    cancellationToken,
+                    progress);
+                cancellationToken.ThrowIfCancellationRequested();
+                if (bytes == null || bytes.Length == 0)
+                {
+                    throw new IOException("The export produced an empty file.");
+                }
+
+                await File.WriteAllBytesAsync(temporaryPath, bytes, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                File.Move(temporaryPath, fullPath, overwrite: true);
+                return new ReportExportResult(extension.Name, fullPath, bytes.LongLength);
+            }
+            catch (Exception exception)
+            {
+                m_lastError = exception;
+                OnError(exception);
+                throw;
+            }
+            finally
+            {
+                if (File.Exists(temporaryPath))
+                {
+                    File.Delete(temporaryPath);
+                }
+            }
+        }
+
+        private RenderingExtension FindRenderingExtension(string format)
+        {
+            RenderingExtension[] extensions = Report.ListRenderingExtensions();
+            if (extensions != null)
+            {
+                foreach (RenderingExtension extension in extensions)
+                {
+                    if (string.Equals(extension.Name, format, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return extension;
+                    }
+                }
+            }
+
+            throw new ArgumentException($"The report does not support export format '{format}'.", nameof(format));
         }
 
         private void OnPageSetup(object sender, EventArgs e)
