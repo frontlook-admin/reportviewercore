@@ -4,6 +4,9 @@
 			"path": "."
 		},
 		{
+			"path": "../FrontLookCore/FLReportViewerCore"
+		},
+		{
 			"path": "../FrontLookCore/FluentReportWriter"
 		},
 		{
