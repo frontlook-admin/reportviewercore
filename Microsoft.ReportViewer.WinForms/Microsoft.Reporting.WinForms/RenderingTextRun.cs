@@ -13,6 +13,8 @@ namespace Microsoft.Reporting.WinForms
 
 		private int m_indexInParagraph;
 
+		private GdiContext m_context;
+
 		internal string Text
 		{
 			get
@@ -87,9 +89,9 @@ namespace Microsoft.Reporting.WinForms
 				Color stylePropertyValueColor = GdiContext.GetStylePropertyValueColor(InstanceProperties, 27);
 				if (stylePropertyValueColor == Color.Empty)
 				{
-					return Color.Black;
+					return m_context?.TransformReportForeground(Color.Black) ?? Color.Black;
 				}
-				return stylePropertyValueColor;
+				return m_context?.TransformReportForeground(stylePropertyValueColor) ?? stylePropertyValueColor;
 			}
 		}
 
@@ -167,6 +169,11 @@ namespace Microsoft.Reporting.WinForms
 			{
 				m_richTextRun = new TextRun(Text, this);
 			}
+		}
+
+		internal override void ProcessRenderingElementContent(RPLElement rplElement, GdiContext context, RectangleF bounds)
+		{
+			m_context = context;
 		}
 	}
 }

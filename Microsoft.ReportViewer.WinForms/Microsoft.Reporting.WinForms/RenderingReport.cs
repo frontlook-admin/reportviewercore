@@ -239,9 +239,10 @@ namespace Microsoft.Reporting.WinForms
 
 		internal void DrawToPage(GdiContext context)
 		{
-			if (BackgroundColor != Color.Empty)
+			Color backgroundColor = context.TransformReportBackground(BackgroundColor);
+			if (backgroundColor != Color.Empty)
 			{
-				using (SolidBrush brush = new SolidBrush(BackgroundColor))
+				using (SolidBrush brush = new SolidBrush(backgroundColor))
 				{
 					context.Graphics.FillRectangle(brush, Position);
 				}

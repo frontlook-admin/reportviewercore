@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Security;
@@ -11,6 +12,8 @@ namespace Microsoft.Reporting.WinForms
 	internal sealed class ExportDialog : Form
 	{
 		private Button cancelButton;
+
+		private CheckBox openAfterExport;
 
 		private Label exportLabel;
 
@@ -30,11 +33,14 @@ namespace Microsoft.Reporting.WinForms
 
 		private bool m_closing;
 
+		private static string s_lastExportDirectory;
+
 		internal ExportDialog(ReportViewer viewer, RenderingExtension extension, string deviceInfo, string fileName)
 		{
 			InitializeComponent();
 			Text = LocalizationHelper.Current.ExportDialogTitle;
 			cancelButton.Text = LocalizationHelper.Current.ExportDialogCancelButton;
+			openAfterExport.Text = "Open file after export";
 			exportLabel.Text = LocalizationHelper.Current.ExportDialogStatusText;
 			m_viewerControl = viewer;
 			m_format = extension;
@@ -60,6 +66,7 @@ namespace Microsoft.Reporting.WinForms
 		{
 			exportLabel = new System.Windows.Forms.Label();
 			cancelButton = new System.Windows.Forms.Button();
+			openAfterExport = new System.Windows.Forms.CheckBox();
 			SuspendLayout();
 			exportLabel.Dock = DockStyle.Top;
 			exportLabel.Location = new Point(16, 8);
@@ -69,13 +76,20 @@ namespace Microsoft.Reporting.WinForms
 			exportLabel.Name = "exportLabel";
 			cancelButton.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 			cancelButton.AutoSize = true;
-			cancelButton.Location = new Point(77, 69);
+			openAfterExport.AutoSize = true;
+			openAfterExport.Location = new Point(64, 45);
+			openAfterExport.Name = "openAfterExport";
+			openAfterExport.Size = new Size(145, 19);
+			openAfterExport.TabIndex = 2;
+			openAfterExport.Text = "Open file after export";
+			cancelButton.Location = new Point(77, 72);
 			cancelButton.Size = new Size(120, 23);
 			cancelButton.Name = "cancelButton";
 			cancelButton.Click += new System.EventHandler(CancelButton_Click);
 			AutoSize = true;
-			ClientSize = new Size(274, 104);
+			ClientSize = new Size(274, 108);
 			base.Controls.Add(cancelButton);
+			base.Controls.Add(openAfterExport);
 			base.Controls.Add(exportLabel);
 			Cursor = System.Windows.Forms.Cursors.Default;
 			base.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
@@ -159,7 +173,16 @@ namespace Microsoft.Reporting.WinForms
 					string destinationPath = PromptFileName(exportOperation.FileNameExtension);
 					if (!string.IsNullOrWhiteSpace(destinationPath))
 					{
+						if (File.Exists(destinationPath) && MessageBox.Show(this, "The file already exists. Replace it?", "Export", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+						{
+							return;
+						}
+
 						CopyExportToDestination(exportOperation, destinationPath);
+						if (openAfterExport.Checked)
+						{
+							OpenExport(destinationPath);
+						}
 						base.DialogResult = DialogResult.OK;
 					}
 				}
@@ -215,6 +238,11 @@ namespace Microsoft.Reporting.WinForms
 			}
 			saveFileDialog.Filter = saveFileDialog.Filter + str + LocalizationHelper.Current.AllFilesFilter + " (*.*)|*.*";
 			saveFileDialog.RestoreDirectory = true;
+			saveFileDialog.OverwritePrompt = true;
+			if (!string.IsNullOrWhiteSpace(s_lastExportDirectory) && Directory.Exists(s_lastExportDirectory))
+			{
+				saveFileDialog.InitialDirectory = s_lastExportDirectory;
+			}
 			bool flag = !string.IsNullOrEmpty(m_fileName);
 			string text = m_fileName;
 			if (!flag)
@@ -240,9 +268,19 @@ namespace Microsoft.Reporting.WinForms
 			}
 			if (flag2)
 			{
+				s_lastExportDirectory = Path.GetDirectoryName(saveFileDialog.FileName);
 				return saveFileDialog.FileName;
 			}
 			return null;
+		}
+
+		private static void OpenExport(string path)
+		{
+			Process.Start(new ProcessStartInfo
+			{
+				FileName = path,
+				UseShellExecute = true
+			});
 		}
 
 		private static void CopyExportToDestination(AsyncExportOperation exportOperation, string destinationPath)

@@ -24,7 +24,7 @@ namespace CliReportCompiler
             {
                 ReportCompilerUtility.ShowUsage();
                 ReportCompilerUtility.LogError(ex);
-                Environment.ExitCode = 1;
+                Environment.ExitCode = ReportCompilerUtility.GetExitCode(ex);
             }
         }
     }

@@ -201,9 +201,10 @@ namespace Microsoft.Reporting.WinForms
 		{
 			if (context.IsOnScreen(base.Position) || context.FirstDraw)
 			{
-				if (Color.Empty != BackgroundColor)
+				Color backgroundColor = context.TransformReportBackground(BackgroundColor);
+				if (Color.Empty != backgroundColor)
 				{
-					context.Graphics.FillRectangle(new SolidBrush(BackgroundColor), base.Position);
+					context.Graphics.FillRectangle(new SolidBrush(backgroundColor), base.Position);
 				}
 				if (BackgroundImage != null)
 				{

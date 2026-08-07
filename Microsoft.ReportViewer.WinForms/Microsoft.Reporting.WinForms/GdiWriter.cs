@@ -6,6 +6,8 @@ namespace Microsoft.Reporting.WinForms
 {
 	internal class GdiWriter : WriterBase
 	{
+		private readonly GdiContext m_context;
+
 		private System.Drawing.Graphics m_graphics;
 
 		internal System.Drawing.Graphics Graphics
@@ -20,9 +22,10 @@ namespace Microsoft.Reporting.WinForms
 			}
 		}
 
-		internal GdiWriter()
+		internal GdiWriter(GdiContext context)
 			: base(null, null, disposeRenderer: false, null)
 		{
+			m_context = context;
 		}
 
 		protected override void Dispose(bool disposing)
@@ -37,21 +40,21 @@ namespace Microsoft.Reporting.WinForms
 
 		internal override void DrawLine(Color color, float size, RPLFormat.BorderStyles style, float x1, float y1, float x2, float y2)
 		{
-			Pen pen = new Pen(color, size);
+			Pen pen = new Pen(m_context.TransformReportForeground(color), size);
 			pen.DashStyle = RenderingItem.TranslateBorderStyle(style);
 			Graphics.DrawLine(pen, x1, y1, x2, y2);
 		}
 
 		internal override void DrawRectangle(Color color, float size, RPLFormat.BorderStyles style, RectangleF rectangle)
 		{
-			Pen pen = new Pen(color, size);
+			Pen pen = new Pen(m_context.TransformReportForeground(color), size);
 			pen.DashStyle = RenderingItem.TranslateBorderStyle(style);
 			Graphics.DrawRectangle(pen, rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height);
 		}
 
 		internal override void FillPolygon(Color color, PointF[] polygon)
 		{
-			Brush brush = new SolidBrush(color);
+			Brush brush = new SolidBrush(m_context.TransformReportForeground(color));
 			Graphics.FillPolygon(brush, polygon);
 		}
 

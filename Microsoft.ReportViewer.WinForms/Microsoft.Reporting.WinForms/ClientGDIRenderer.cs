@@ -16,6 +16,8 @@ namespace Microsoft.Reporting.WinForms
 
 		private GdiContext m_context;
 
+		private ReportViewerTheme m_theme = ReportViewerTheme.Light;
+
 		internal GdiContext Context => m_context;
 
 		internal float PageWidth => m_report.Position.Width;
@@ -23,6 +25,12 @@ namespace Microsoft.Reporting.WinForms
 		internal float PageHeight => m_report.Position.Height;
 
 		internal RenderingReport Report => m_report;
+
+		internal ReportViewerTheme Theme
+		{
+			get => m_theme;
+			set => m_theme = value ?? ReportViewerTheme.Light;
+		}
 
 		internal ClientGDIRenderer(byte[] pageByteArray)
 		{
@@ -68,6 +76,7 @@ namespace Microsoft.Reporting.WinForms
 			if (graphics != null)
 			{
 				Context.Graphics = graphics;
+				Context.Theme = m_theme;
 				Context.FirstDraw = firstDraw;
 				Context.TestMode = testMode;
 				m_report.DrawToPage(Context);

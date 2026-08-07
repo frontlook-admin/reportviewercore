@@ -34,6 +34,10 @@ namespace CliReportCompiler
         private const string VerboseOption = "Verbose";
         private const string LogFileOption = "LogFile";
         private const string ContinueOnErrorOption = "ContinueOnError";
+        private const string BatchFileOption = "BatchFile";
+        private const string ListFormatsOption = "ListFormats";
+        private const string ValidateOption = "Validate";
+        private const string OpenExportOption = "OpenExport";
         private const string VersionOption = "Version";
 
         private const string UsageText = @"Usage: CliReportCompiler.exe options
@@ -51,6 +55,10 @@ Options:
   --Verbose|-v              Write lifecycle details to the console and log file.
   --LogFile|-lf             Write structured JSONL logs to this file.
   --ContinueOnError|-coe    Continue interactive input after an error: true or false. Default: true.
+  --BatchFile|-bf           Execute one quoted command line per non-empty line in a batch file.
+  --Validate|-val           Validate report, data, print setup, and export inputs without rendering.
+  --OpenExport|-oe          Open the exported file with the default Windows application.
+  --ListFormats|-formats    List supported export formats and exit.
   --Version|--ver|-ver      Display compiler and ReportViewer versions.
   --Test|-t                 Test message (for debugging purposes).
   --Demo|-d                 Run a demo of the ReportViewer.
@@ -79,6 +87,10 @@ Example:
                 [VerboseOption] = "v",
                 [LogFileOption] = "lf",
                 [ContinueOnErrorOption] = "coe",
+                [BatchFileOption] = "bf",
+                [ValidateOption] = "val",
+                [OpenExportOption] = "oe",
+                [ListFormatsOption] = "formats",
                 ["Test"] = "t"
             };
 
@@ -165,6 +177,12 @@ Example:
                 return false;
             }
 
+            if (HasArgument(args, $"--{ListFormatsOption}", "-formats"))
+            {
+                ShowFormats();
+                return false;
+            }
+
             if (HasArgument(args, "--DEMO", "-D", "DEMO", "D"))
             {
                 RunDemo();
@@ -244,7 +262,7 @@ Example:
                 {
                     ShowUsage();
                     LogError(ex, GetErrorLoggingEnabled());
-                    Environment.ExitCode = 1;
+                    Environment.ExitCode = GetExitCode(ex);
 
                     if (!GetContinueOnError())
                     {
@@ -263,6 +281,11 @@ Example:
             var viewerVersion = typeof(ReportViewer).Assembly.GetName().Version?.ToString() ?? "unknown";
             Console.WriteLine($"CliReportCompiler {compilerVersion}");
             Console.WriteLine($"ReportViewer {viewerVersion}");
+        }
+
+        public static void ShowFormats()
+        {
+            Console.WriteLine("Supported export formats: PDF, EXCEL, EXCELOPENXML, WORD, WORDOPENXML, IMAGE, HTML4_0, HTML5, MHTML");
         }
 
         /// <summary>
@@ -312,6 +335,9 @@ Example:
         {
             var stopwatch = Stopwatch.StartNew();
             var reportPath = GetOptionalParameter("ReportPath");
+            var dataSourcePath = GetOptionalParameter("ReportDataSource");
+            var reportName = GetOptionalParameter("ReportName");
+            var mode = GetOptionalParameter("Mode");
             LogInfo("execution_started", reportPath);
 
             if (GetParameters.TryGetValue("Test", out var testValue) && !string.IsNullOrEmpty(testValue))
@@ -323,6 +349,12 @@ Example:
                 .Where(parameter => !GetParameters.ContainsKey(parameter))
                 .ToArray();
 
+            if (!string.IsNullOrWhiteSpace(GetOptionalParameter(BatchFileOption)))
+            {
+                ExecuteBatch(GetRequiredParameter(BatchFileOption));
+                return;
+            }
+
             if (missingParameters.Length > 0)
             {
                 throw new ArgumentException($"Missing required parameters: {string.Join(", ", missingParameters)}");
@@ -330,6 +362,13 @@ Example:
 
             try
             {
+                if (GetBooleanParameter(ValidateOption, defaultValue: false))
+                {
+                    ValidateReportInputs(reportPath, dataSourcePath, reportName, mode);
+                    LogInfo("validation_succeeded", reportPath, stopwatch.Elapsed);
+                    return;
+                }
+
                 ProcessReport(GetWaitForViewer(), GetErrorLoggingEnabled());
                 LogInfo("execution_succeeded", reportPath, stopwatch.Elapsed);
             }
@@ -337,6 +376,52 @@ Example:
             {
                 LogInfo("execution_failed", reportPath, stopwatch.Elapsed);
                 throw;
+            }
+        }
+
+        private static void ExecuteBatch(string batchFile)
+        {
+            if (!File.Exists(batchFile))
+            {
+                throw new FileNotFoundException("Batch file not found", batchFile);
+            }
+
+            var continueOnError = GetContinueOnError();
+            var detailedErrors = GetErrorLoggingEnabled();
+            var logFile = GetLogFilePath();
+            var failures = 0;
+
+            foreach (var line in File.ReadLines(batchFile))
+            {
+                var commandLine = line.Trim();
+                if (commandLine.Length == 0 || commandLine.StartsWith("#", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var arguments = SplitCommandLineArgs(commandLine);
+                    if (ParseArguments(arguments))
+                    {
+                        Execute();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    failures++;
+                    ShowUsage();
+                    LogError(ex, detailedErrors, null, logFile);
+                    if (!continueOnError)
+                    {
+                        throw;
+                    }
+                }
+            }
+
+            if (failures > 0)
+            {
+                throw new InvalidOperationException($"Batch completed with {failures} failed command(s).");
             }
         }
 
@@ -430,6 +515,52 @@ Example:
             {
                 throw new FileNotFoundException("Data source file not found", dataSourcePath);
             }
+        }
+
+        private static void ValidateReportInputs(string reportPath, string dataSourcePath, string reportName, string mode)
+        {
+            var normalizedMode = mode.Trim().ToUpperInvariant();
+            if (normalizedMode != PreviewMode
+                && normalizedMode != PrintMode
+                && normalizedMode != PrintSetupMode
+                && normalizedMode != PrintSettingsMode
+                && normalizedMode != ExportMode)
+            {
+                throw new ArgumentException($"Invalid mode: {mode}. Supported modes: Preview, Print, PrintSetup, PrintSettings, Export");
+            }
+
+            ValidateFilesExist(reportPath, dataSourcePath);
+            var dataSet = LoadDataset(dataSourcePath);
+            if (dataSet.Tables.Count == 0)
+            {
+                throw new InvalidDataException("No data tables found in the data source");
+            }
+
+            var printSetupFile = GetOptionalParameter("PrintSetupFile");
+            if (!string.IsNullOrWhiteSpace(printSetupFile) && File.Exists(printSetupFile))
+            {
+                var printSettings = File.ReadAllText(printSetupFile).FL_CastToClass<CustomPrintDialog>();
+                if (printSettings?.CPageSettings == null && printSettings?.PaperSize == null)
+                {
+                    throw new InvalidDataException("Invalid print settings file format.");
+                }
+            }
+
+            if (normalizedMode == ExportMode)
+            {
+                GetExportFormat();
+                var exportPath = GetRequiredParameter("ExportPath");
+                if (string.IsNullOrWhiteSpace(Path.GetFileName(exportPath)))
+                {
+                    throw new ArgumentException("ExportPath must include a valid output file name.");
+                }
+            }
+
+            LogInfo("inputs_validated", reportPath, null, new
+            {
+                ReportName = reportName,
+                Tables = dataSet.Tables.Count
+            });
         }
 
         /// <summary>
@@ -616,6 +747,15 @@ Example:
                 File.Move(temporaryExportPath, exportPath, overwrite: true);
                 report.ExportFileName = exportPath;
                 LogInfo("export_succeeded", exportPath, null, new { Bytes = fileInfo.Length });
+
+                if (GetBooleanParameter(OpenExportOption, defaultValue: false))
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = exportPath,
+                        UseShellExecute = true
+                    });
+                }
             }
             finally
             {
@@ -654,6 +794,34 @@ Example:
         public static Dictionary<string, string> GetCurrentParameters()
         {
             return new Dictionary<string, string>(GetParameters, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public static int GetExitCode(Exception exception)
+        {
+            for (var current = exception; current != null; current = current.InnerException)
+            {
+                if (current is ArgumentException)
+                {
+                    return 2;
+                }
+
+                if (current is FileNotFoundException)
+                {
+                    return 3;
+                }
+
+                if (current is InvalidDataException)
+                {
+                    return 4;
+                }
+
+                if (current is OperationCanceledException)
+                {
+                    return 5;
+                }
+            }
+
+            return 1;
         }
 
         /// <summary>
@@ -734,7 +902,9 @@ Example:
             return string.Equals(parameterName, WaitForViewerOption, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(parameterName, EnableErrorLoggingOption, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(parameterName, VerboseOption, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(parameterName, ContinueOnErrorOption, StringComparison.OrdinalIgnoreCase);
+                || string.Equals(parameterName, ContinueOnErrorOption, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(parameterName, ValidateOption, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(parameterName, OpenExportOption, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void ValidateBooleanOption(string parameterName, string value)

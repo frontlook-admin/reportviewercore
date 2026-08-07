@@ -44,6 +44,8 @@ namespace Microsoft.Reporting.WinForms
 
 		private bool m_testMode;
 
+		internal ReportViewerTheme Theme { get; set; } = ReportViewerTheme.Light;
+
 		internal static Dictionary<string, Bitmap> ImageResources => m_imageResources;
 
 		internal System.Drawing.Graphics Graphics
@@ -70,7 +72,7 @@ namespace Microsoft.Reporting.WinForms
 			{
 				if (m_gdiWriter == null)
 				{
-					m_gdiWriter = new GdiWriter();
+					m_gdiWriter = new GdiWriter(this);
 				}
 				return m_gdiWriter;
 			}
@@ -110,6 +112,16 @@ namespace Microsoft.Reporting.WinForms
 			{
 				m_firstDraw = value;
 			}
+		}
+
+		internal Color TransformReportForeground(Color color)
+		{
+			return Theme.MapReportForeground(color);
+		}
+
+		internal Color TransformReportBackground(Color color)
+		{
+			return Theme.MapReportBackground(color);
 		}
 
 		internal GdiContext()

@@ -836,6 +836,10 @@ namespace Microsoft.Reporting.WinForms
 				}
 				m_previousPageWidth = GetCurrentPageWidth();
 				m_currentPage = value;
+				if (m_currentPage is GdiPage gdiPage)
+				{
+					gdiPage.ApplyTheme(m_theme);
+				}
 				base.AutoScrollPosition = Point.Empty;
 				m_renderPanel.RecalculateSize();
 			}
@@ -1027,7 +1031,7 @@ namespace Microsoft.Reporting.WinForms
 			{
 				if ((Control.ModifierKeys & Keys.Control) == Keys.Control)
 				{
-					ZoomWithMouseWheel(e.Delta);
+					ZoomWithMouseWheel(e.Delta, e.Location);
 					return;
 				}
 
@@ -1039,13 +1043,17 @@ namespace Microsoft.Reporting.WinForms
 			}
 		}
 
-		private void ZoomWithMouseWheel(int delta)
+		private void ZoomWithMouseWheel(int delta, Point mouseLocation)
 		{
 			if (delta == 0 || ZoomChange == null || ViewerControl == null)
 			{
 				return;
 			}
 
+			float oldZoomRate = GetZoomRate();
+			Point oldScrollPosition = new Point(-base.AutoScrollPosition.X, -base.AutoScrollPosition.Y);
+			ZoomMode oldZoomMode = ViewerControl.ZoomMode;
+			int oldZoomPercent = ViewerControl.ZoomPercent;
 			int zoomPercent = ViewerControl.ZoomPercent + (delta > 0 ? 10 : -10);
 			zoomPercent = Math.Max(10, Math.Min(400, zoomPercent));
 			if (ViewerControl.ZoomMode == ZoomMode.Percent && zoomPercent == ViewerControl.ZoomPercent)
@@ -1055,6 +1063,21 @@ namespace Microsoft.Reporting.WinForms
 
 			ZoomChangeEventArgs zoomChange = new ZoomChangeEventArgs(ZoomMode.Percent, zoomPercent);
 			ZoomChange(this, zoomChange);
+
+			if (ViewerControl.ZoomMode == oldZoomMode && ViewerControl.ZoomPercent == oldZoomPercent)
+			{
+				return;
+			}
+
+			float newZoomRate = GetZoomRate();
+			if (oldZoomRate <= 0f || newZoomRate <= 0f || Math.Abs(oldZoomRate - newZoomRate) < 0.001f)
+			{
+				return;
+			}
+
+			int newScrollX = Math.Max(0, Convert.ToInt32(((mouseLocation.X + oldScrollPosition.X) / oldZoomRate * newZoomRate) - mouseLocation.X));
+			int newScrollY = Math.Max(0, Convert.ToInt32(((mouseLocation.Y + oldScrollPosition.Y) / oldZoomRate * newZoomRate) - mouseLocation.Y));
+			SetAutoScrollLocation(new Point(newScrollX, newScrollY));
 		}
 
 		private void OnMouseClick(object sender, MouseEventArgs e)
@@ -1199,6 +1222,10 @@ namespace Microsoft.Reporting.WinForms
 		internal void ApplyTheme(ReportViewerTheme theme, ToolStripRenderer renderer)
 		{
 			m_theme = theme ?? ReportViewerTheme.Light;
+			if (m_currentPage is GdiPage gdiPage)
+			{
+				gdiPage.ApplyTheme(m_theme);
+			}
 			BackColor = m_theme.CanvasBackground;
 			m_renderPanel.BackColor = m_theme.CanvasBackground;
 			m_renderPanel.ApplyTheme(m_theme);

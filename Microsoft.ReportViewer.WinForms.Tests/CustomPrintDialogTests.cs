@@ -414,6 +414,34 @@ namespace Microsoft.ReportViewer.WinForms.Tests
         }
 
         [Fact]
+        public void ReportViewer_CanApplyHighContrastTheme()
+        {
+            using var reportViewer = new ReportViewerControl
+            {
+                Theme = ReportViewerTheme.HighContrast
+            };
+
+            reportViewer.Theme.Should().BeSameAs(ReportViewerTheme.HighContrast);
+            reportViewer.Theme.ToolbarBackground.Should().Be(Color.Black);
+            reportViewer.Theme.Foreground.Should().Be(Color.White);
+        }
+
+        [Fact]
+        public void ReportViewer_StatusBarCanBeToggled()
+        {
+            using var reportViewer = new ReportViewerControl
+            {
+                ShowStatusBar = false
+            };
+
+            reportViewer.ShowStatusBar.Should().BeFalse();
+
+            reportViewer.ShowStatusBar = true;
+
+            reportViewer.ShowStatusBar.Should().BeTrue();
+        }
+
+        [Fact]
         public void ReportViewer_CreateEMFDeviceInfo_UsesHundredthsOfAnInchMargins()
         {
             using var reportViewer = new ReportViewerControl();

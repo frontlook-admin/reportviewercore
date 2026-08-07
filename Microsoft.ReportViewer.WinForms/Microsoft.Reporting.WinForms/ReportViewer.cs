@@ -61,6 +61,8 @@ namespace Microsoft.Reporting.WinForms
 
         private bool m_showProgress = true;
 
+        private bool m_showStatusBar = true;
+
         private int m_toolbarVisibility = -1;
 
         public UIState m_lastUIState;
@@ -98,6 +100,14 @@ namespace Microsoft.Reporting.WinForms
         private RSParams rsParams;
 
         private ReportToolBar reportToolBar;
+
+        private StatusStrip reportStatusStrip;
+
+        private ToolStripStatusLabel statusMessage;
+
+        private ToolStripProgressBar statusProgress;
+
+        private ToolStripStatusLabel statusZoom;
 
         private RVSplitContainer dmSplitContainer;
 
@@ -343,6 +353,25 @@ namespace Microsoft.Reporting.WinForms
             set
             {
                 m_showProgress = value;
+            }
+        }
+
+        [Category("Appearance")]
+        [DefaultValue(true)]
+        [Description("Shows the report viewer status bar.")]
+        public bool ShowStatusBar
+        {
+            get
+            {
+                return m_showStatusBar;
+            }
+            set
+            {
+                m_showStatusBar = value;
+                if (reportStatusStrip != null)
+                {
+                    reportStatusStrip.Visible = value;
+                }
             }
         }
 
@@ -707,6 +736,11 @@ namespace Microsoft.Reporting.WinForms
             dmSplitContainer.BackColor = m_theme.ToolbarBorder;
             rsParams.BackColor = m_theme.CanvasBackground;
             rsDocMap.BackColor = m_theme.InputBackground;
+            reportStatusStrip.BackColor = m_theme.ToolbarBackground;
+            reportStatusStrip.ForeColor = m_theme.Foreground;
+            statusMessage.ForeColor = m_theme.Foreground;
+            statusProgress.ForeColor = m_theme.Accent;
+            statusZoom.ForeColor = m_theme.Foreground;
             reportToolBar.ApplyTheme(m_theme, m_toolStripRenderer);
             winRSviewer.ApplyTheme(m_theme, m_toolStripRenderer);
         }
@@ -762,6 +796,34 @@ namespace Microsoft.Reporting.WinForms
         [Browsable(false)]
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public SearchState SearchState => m_searchState;
+
+        [Browsable(false)]
+        public int SearchMatchCount
+        {
+            get
+            {
+                if (m_searchState == null || m_reportHierarchy.Count == 0 || CurrentReport.GdiRenderer?.Context == null)
+                {
+                    return 0;
+                }
+
+                return CurrentReport.GdiRenderer.Context.SearchMatches?.Count ?? 0;
+            }
+        }
+
+        [Browsable(false)]
+        public int SearchMatchIndex
+        {
+            get
+            {
+                if (SearchMatchCount == 0 || CurrentReport.GdiRenderer?.Context == null)
+                {
+                    return 0;
+                }
+
+                return CurrentReport.GdiRenderer.Context.SearchMatchIndex + 1;
+            }
+        }
 
         private PageSettings PageSettings
         {
@@ -871,16 +933,117 @@ namespace Microsoft.Reporting.WinForms
 
         public ReportViewer()
         {
+            if (SystemInformation.HighContrast)
+            {
+                m_theme = ReportViewerTheme.HighContrast;
+            }
             InitializeComponent();
             reportToolBar.SetToolStripRenderer(m_toolStripRenderer);
             winRSviewer.SetToolStripRenderer(m_toolStripRenderer);
+            reportToolBar.ThemeChange += OnThemeChange;
             ApplyTheme();
             reportToolBar.ViewerControl = this;
             rsParams.ViewerControl = this;
             winRSviewer.ViewerControl = this;
             m_autoRefreshTimer.Tick += OnRefresh;
+            RenderingProgress += OnRenderingProgress;
             Reset();
             SetZoom();
+        }
+
+        private void OnThemeChange(object sender, EventArgs e)
+        {
+            Theme = reportToolBar.SelectedTheme;
+        }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            Keys key = keyData & Keys.KeyCode;
+            Keys modifiers = keyData & Keys.Modifiers;
+
+            if (modifiers == Keys.Control)
+            {
+                if (key == Keys.Add || key == Keys.Oemplus)
+                {
+                    ChangeZoomByKeyboard(10);
+                    return true;
+                }
+
+                if (key == Keys.Subtract || key == Keys.OemMinus)
+                {
+                    ChangeZoomByKeyboard(-10);
+                    return true;
+                }
+
+                if (key == Keys.D0 || key == Keys.NumPad0)
+                {
+                    ZoomMode = ZoomMode.Percent;
+                    ZoomPercent = 100;
+                    return true;
+                }
+
+                if (key == Keys.F)
+                {
+                    reportToolBar.FocusSearch();
+                    return true;
+                }
+            }
+
+            if (modifiers == Keys.None)
+            {
+                if (key == Keys.PageUp)
+                {
+                    return NavigateWithKeyboard(CurrentPage - 1);
+                }
+
+                if (key == Keys.PageDown)
+                {
+                    return NavigateWithKeyboard(CurrentPage + 1);
+                }
+
+                if (key == Keys.Home)
+                {
+                    return NavigateWithKeyboard(1);
+                }
+
+                if (key == Keys.End)
+                {
+                    var totalPages = GetTotalPages(out var pageCountMode);
+                    return NavigateWithKeyboard(pageCountMode == PageCountMode.Estimate ? int.MaxValue : totalPages);
+                }
+
+                if (key == Keys.F5)
+                {
+                    RefreshReport();
+                    return true;
+                }
+
+                if (key == Keys.Escape && CurrentStatus != null && CurrentStatus.InCancelableOperation)
+                {
+                    CancelRendering(0);
+                    return true;
+                }
+            }
+
+            return base.ProcessCmdKey(ref msg, keyData);
+        }
+
+        private void ChangeZoomByKeyboard(int amount)
+        {
+            int zoomPercent = Math.Max(10, Math.Min(400, ZoomPercent + amount));
+            ZoomMode = ZoomMode.Percent;
+            ZoomPercent = zoomPercent;
+        }
+
+        private bool NavigateWithKeyboard(int targetPage)
+        {
+            if (CurrentStatus == null || !CurrentStatus.CanNavigatePages || !CanMoveToPage(targetPage))
+            {
+                return false;
+            }
+
+            OnPageNavigation(this, new PageNavigationEventArgs(targetPage));
+            return true;
         }
 
         private void OnZoomChanged(object sender, ZoomChangeEventArgs e)
@@ -1172,6 +1335,63 @@ namespace Microsoft.Reporting.WinForms
             }
         }
 
+        private void OnRenderingProgress(object sender, ReportRenderProgress progress)
+        {
+            if (reportStatusStrip == null || IsDisposed)
+            {
+                return;
+            }
+
+            if (InvokeRequired)
+            {
+                try
+                {
+                    BeginInvoke(new MethodInvoker(() => OnRenderingProgress(sender, progress)));
+                }
+                catch (InvalidOperationException)
+                {
+                }
+                return;
+            }
+
+            statusMessage.Text = progress.Message ?? string.Empty;
+            statusProgress.Visible = progress.Stage == ReportRenderStage.Started || progress.Stage == ReportRenderStage.Rendering;
+            if (progress.Stage == ReportRenderStage.Completed)
+            {
+                statusMessage.Text = "Ready";
+            }
+            else if (progress.Stage == ReportRenderStage.Cancelled)
+            {
+                statusMessage.Text = "Cancelled";
+            }
+            else if (progress.Stage == ReportRenderStage.Failed && progress.Error != null)
+            {
+                statusMessage.Text = progress.Error.Message;
+            }
+        }
+
+        private void UpdateStatusBar(UIState state)
+        {
+            if (reportStatusStrip == null)
+            {
+                return;
+            }
+
+            statusZoom.Text = ZoomMode == ZoomMode.Percent
+                ? $"{ZoomPercent}%"
+                : ZoomMode == ZoomMode.PageWidth ? "Page width" : "Full page";
+            statusMessage.Text = SearchMatchCount > 0
+                ? $"Match {SearchMatchIndex} of {SearchMatchCount}"
+                : state switch
+            {
+                UIState.NoReport => "No report loaded",
+                UIState.LongRunningAction => "Working...",
+                UIState.ProcessingFailure => "Report rendering failed",
+                UIState.ProcessingPartial => $"Page {CurrentPage} (partial)",
+                _ => $"Page {CurrentPage}"
+            };
+        }
+
         private void TriggerWaitControl()
         {
             if (CurrentStatus.CanInteractWithReportPage == ReportViewerStatus.DoesStateAllowInteractWithReportPage(m_lastUIState))
@@ -1261,6 +1481,10 @@ namespace Microsoft.Reporting.WinForms
             rsDocMap = new Microsoft.Reporting.WinForms.RSDocMap();
             winRSviewer = new Microsoft.Reporting.WinForms.WinRSviewer();
             reportToolBar = new Microsoft.Reporting.WinForms.ReportToolBar();
+            reportStatusStrip = new StatusStrip();
+            statusMessage = new ToolStripStatusLabel();
+            statusProgress = new ToolStripProgressBar();
+            statusZoom = new ToolStripStatusLabel();
             paramsSplitContainer.Panel1.SuspendLayout();
             paramsSplitContainer.Panel2.SuspendLayout();
             paramsSplitContainer.SuspendLayout();
@@ -1280,6 +1504,7 @@ namespace Microsoft.Reporting.WinForms
             paramsSplitContainer.Panel1Visible = false;
             paramsSplitContainer.Panel2.Controls.Add(dmSplitContainer);
             paramsSplitContainer.Panel2.Controls.Add(reportToolBar);
+            paramsSplitContainer.Panel2.Controls.Add(reportStatusStrip);
             paramsSplitContainer.SplitterMoving += new System.EventHandler(OnParamsSplitterMoving);
             paramsSplitContainer.CollapsedChanged += new System.EventHandler(OnPromptAreaCollapse);
             rsParams.AutoScroll = true;
@@ -1341,6 +1566,22 @@ namespace Microsoft.Reporting.WinForms
             reportToolBar.Search += new Microsoft.Reporting.WinForms.SearchEventHandler(OnSearch);
             reportToolBar.Back += new System.EventHandler(OnBack);
             reportToolBar.PageNavigation += new Microsoft.Reporting.WinForms.PageNavigationEventHandler(OnPageNavigation);
+            reportStatusStrip.Dock = DockStyle.Bottom;
+            reportStatusStrip.Name = "reportStatusStrip";
+            reportStatusStrip.SizingGrip = false;
+            reportStatusStrip.TabStop = false;
+            reportStatusStrip.Items.AddRange(new ToolStripItem[] { statusMessage, statusProgress, statusZoom });
+            statusMessage.Name = "statusMessage";
+            statusMessage.Spring = true;
+            statusMessage.TextAlign = ContentAlignment.MiddleLeft;
+            statusProgress.Name = "statusProgress";
+            statusProgress.MarqueeAnimationSpeed = 30;
+            statusProgress.Size = new Size(120, 16);
+            statusProgress.Visible = false;
+            statusZoom.Name = "statusZoom";
+            statusZoom.AutoSize = false;
+            statusZoom.Size = new Size(64, 16);
+            statusZoom.TextAlign = ContentAlignment.MiddleRight;
             BackColor = System.Drawing.Color.FromArgb(243, 246, 250);
             BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             base.Controls.Add(paramsSplitContainer);
@@ -3308,6 +3549,7 @@ namespace Microsoft.Reporting.WinForms
             paramsSplitContainer.SplitterVisible = ShowPromptAreaButton;
             paramsSplitContainer.Collapsed = PromptAreaCollapsed;
             rsParams.Enabled = (m_status.CanSubmitPromptAreaValues && m_status.IsPromptingSupported);
+            UpdateStatusBar(newState);
             OnStatusChanged(this, EventArgs.Empty);
             m_canRenderForWaitControl = (m_lastUIState == UIState.ProcessingSuccess);
             m_lastUIState = newState;

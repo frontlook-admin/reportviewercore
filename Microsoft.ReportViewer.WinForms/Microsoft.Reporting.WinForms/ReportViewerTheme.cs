@@ -33,6 +33,19 @@ namespace Microsoft.Reporting.WinForms
             Color.FromArgb(62, 38, 41),
             Color.FromArgb(255, 190, 190));
 
+        private static readonly ReportViewerTheme s_highContrast = new ReportViewerTheme(
+            Color.Black,
+            Color.White,
+            Color.Black,
+            Color.White,
+            Color.Black,
+            Color.Black,
+            Color.Yellow,
+            Color.White,
+            Color.LightGray,
+            Color.Black,
+            Color.Yellow);
+
         public ReportViewerTheme(
             Color toolbarBackground,
             Color toolbarBorder,
@@ -84,5 +97,64 @@ namespace Microsoft.Reporting.WinForms
         public static ReportViewerTheme Light => s_light;
 
         public static ReportViewerTheme Dark => s_dark;
+
+        public static ReportViewerTheme HighContrast => s_highContrast;
+
+        internal Color MapReportForeground(Color source)
+        {
+            if (source.IsEmpty || source == Color.Transparent || !IsDarkCanvas)
+            {
+                return source;
+            }
+
+            // Report definitions commonly use black as the default text color.
+            // Keep colors that already contrast with the themed canvas, but move
+            // dark colors to the theme foreground when they would disappear.
+            if (GetContrastRatio(source, CanvasBackground) >= 3.0)
+            {
+                return source;
+            }
+
+            return Color.FromArgb(source.A, Foreground.R, Foreground.G, Foreground.B);
+        }
+
+        internal Color MapReportBackground(Color source)
+        {
+            if (source.IsEmpty || source == Color.Transparent || !IsDarkCanvas)
+            {
+                return source;
+            }
+
+            // A white report surface is the light-theme equivalent of the
+            // canvas surface. Re-map it so dark mode remains a real dark mode.
+            if (GetRelativeLuminance(source) >= 0.95)
+            {
+                return CanvasBackground;
+            }
+
+            return source;
+        }
+
+        private bool IsDarkCanvas => GetRelativeLuminance(CanvasBackground) < 0.5;
+
+        private static double GetContrastRatio(Color first, Color second)
+        {
+            double firstLuminance = GetRelativeLuminance(first);
+            double secondLuminance = GetRelativeLuminance(second);
+            double brighter = firstLuminance > secondLuminance ? firstLuminance : secondLuminance;
+            double darker = firstLuminance > secondLuminance ? secondLuminance : firstLuminance;
+            return (brighter + 0.05) / (darker + 0.05);
+        }
+
+        private static double GetRelativeLuminance(Color color)
+        {
+            static double Linearize(byte channel)
+            {
+                double value = channel / 255.0;
+                return value <= 0.03928 ? value / 12.92 : System.Math.Pow((value + 0.055) / 1.055, 2.4);
+            }
+
+            return 0.2126 * Linearize(color.R) + 0.7152 * Linearize(color.G) + 0.0722 * Linearize(color.B);
+        }
     }
 }

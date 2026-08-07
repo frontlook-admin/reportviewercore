@@ -113,6 +113,11 @@ namespace Microsoft.Reporting.WinForms
 			m_gdiRenderer = renderer;
 		}
 
+		internal void ApplyTheme(ReportViewerTheme theme)
+		{
+			m_gdiRenderer.Theme = theme;
+		}
+
 		public override void Draw(Graphics g, PointF scrollOffset, bool testMode)
 		{
 			if (m_firstDraw)

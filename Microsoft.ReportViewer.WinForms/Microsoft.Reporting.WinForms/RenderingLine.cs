@@ -33,7 +33,7 @@ namespace Microsoft.Reporting.WinForms
 
 		internal override void DrawContent(GdiContext context)
 		{
-			Pen pen = new Pen(Color, Width);
+			Pen pen = new Pen(context.TransformReportForeground(Color), Width);
 			pen.DashStyle = Style;
 			if (!((RPLLinePropsDef)DefinitionProperties).Slant)
 			{

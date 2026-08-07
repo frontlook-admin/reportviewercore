@@ -50,8 +50,14 @@ namespace Microsoft.Reporting.WinForms
         private ToolStripButton toolStripButton1;
         private ToolStripButton printerPageSettings;
         private ToolStripDropDownButton export;
+        private ToolStripDropDownButton themeButton;
+        private ToolStripMenuItem lightTheme;
+        private ToolStripMenuItem darkTheme;
+        private ToolStripMenuItem highContrastTheme;
 
         private ReportViewerTheme m_theme = ReportViewerTheme.Light;
+
+        private readonly AutoCompleteStringCollection m_searchHistory = new AutoCompleteStringCollection();
 
 		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
 		public override Size MinimumSize
@@ -118,6 +124,10 @@ namespace Microsoft.Reporting.WinForms
 
         public event EventHandler PageSetup;
 
+        public event EventHandler ThemeChange;
+
+        internal ReportViewerTheme SelectedTheme => m_theme;
+
         public ReportToolBar()
         {
             InitializeComponent();
@@ -169,6 +179,7 @@ namespace Microsoft.Reporting.WinForms
             DirectPrint.ToolTipText = LocalizationHelper.Current.PrintButtonToolTip;
             printerPageSettings.ToolTipText = LocalizationHelper.Current.PageSetupButtonToolTip;
             export.ToolTipText = LocalizationHelper.Current.ExportButtonToolTip;
+            themeButton.ToolTipText = "Change viewer theme";
             zoom.ToolTipText = LocalizationHelper.Current.ZoomControlToolTip;
             textToFind.ToolTipText = LocalizationHelper.Current.SearchTextBoxToolTip;
             find.Text = LocalizationHelper.Current.FindButtonText;
@@ -224,6 +235,9 @@ namespace Microsoft.Reporting.WinForms
             zoom.ComboBox.ForeColor = m_theme.Foreground;
             textToFind.TextBox.BackColor = m_theme.InputBackground;
             textToFind.TextBox.ForeColor = m_theme.Foreground;
+            lightTheme.Checked = m_theme.ToolbarBackground == ReportViewerTheme.Light.ToolbarBackground;
+            darkTheme.Checked = m_theme.ToolbarBackground == ReportViewerTheme.Dark.ToolbarBackground;
+            highContrastTheme.Checked = m_theme.ToolbarBackground == ReportViewerTheme.HighContrast.ToolbarBackground;
             Invalidate(true);
         }
 
@@ -259,6 +273,10 @@ namespace Microsoft.Reporting.WinForms
             pageSetup = new ToolStripButtonOverride();
             printerPageSettings = new ToolStripButton();
             export = new ToolStripDropDownButton();
+            themeButton = new ToolStripDropDownButton();
+            lightTheme = new ToolStripMenuItem();
+            darkTheme = new ToolStripMenuItem();
+            highContrastTheme = new ToolStripMenuItem();
             separator4 = new ToolStripSeparator();
             zoomIn = new ToolStripButton();
             zoom = new ToolStripComboBox();
@@ -376,6 +394,8 @@ namespace Microsoft.Reporting.WinForms
             toolStrip1.Dock = DockStyle.Fill;
             toolStrip1.GripStyle = ToolStripGripStyle.Hidden;
             toolStrip1.Items.AddRange(new ToolStripItem[] { firstPage, previousPage, currentPage, labelOf, totalPages, nextPage, lastPage, toolStripSeparator2, back, stop, refresh, toolStripSeparator3, DirectPrint, PrintDialog, printPreview, pageSetup, printerPageSettings, export, separator4, zoomIn, zoom, zoomOut, textToFind, find, toolStripSeparator4, findNext });
+            themeButton.DropDownItems.AddRange(new ToolStripItem[] { lightTheme, darkTheme, highContrastTheme });
+            toolStrip1.Items.Add(themeButton);
             toolStrip1.Location = new Point(0, 0);
             toolStrip1.Name = "toolStrip1";
             toolStrip1.RenderMode = ToolStripRenderMode.Professional;
@@ -443,6 +463,21 @@ namespace Microsoft.Reporting.WinForms
             export.Name = "export";
             export.Size = new Size(29, 22);
             export.DropDownItemClicked += OnExport;
+            //
+            // themeButton
+            //
+            themeButton.DisplayStyle = ToolStripItemDisplayStyle.Text;
+            themeButton.Name = "themeButton";
+            themeButton.Size = new Size(58, 32);
+            themeButton.Text = "Theme";
+            themeButton.AccessibleName = "Change viewer theme";
+            themeButton.DropDownItemClicked += OnThemeItemClicked;
+            lightTheme.Name = "lightTheme";
+            lightTheme.Text = "Light";
+            darkTheme.Name = "darkTheme";
+            darkTheme.Text = "Dark";
+            highContrastTheme.Name = "highContrastTheme";
+            highContrastTheme.Text = "High contrast";
             // 
             // separator4
             // 
@@ -533,6 +568,8 @@ namespace Microsoft.Reporting.WinForms
             toolStrip1.Renderer = new ModernReportToolStripRenderer(m_theme);
             toolStrip1.BackColor = m_theme.ToolbarBackground;
             toolStrip1.ForeColor = m_theme.Foreground;
+            themeButton.AutoSize = false;
+            themeButton.Size = new Size(58, 32);
 
             foreach (ToolStripItem item in toolStrip1.Items)
             {
@@ -561,6 +598,9 @@ namespace Microsoft.Reporting.WinForms
             textToFind.TextBox.BorderStyle = BorderStyle.FixedSingle;
             textToFind.TextBox.BackColor = m_theme.InputBackground;
             textToFind.TextBox.ForeColor = m_theme.Foreground;
+            textToFind.TextBox.AutoCompleteMode = AutoCompleteMode.Suggest;
+            textToFind.TextBox.AutoCompleteSource = AutoCompleteSource.CustomSource;
+            textToFind.TextBox.AutoCompleteCustomSource = m_searchHistory;
         }
 
         private void OnZoomChanged(object sender, EventArgs e)
@@ -571,6 +611,14 @@ namespace Microsoft.Reporting.WinForms
                 ZoomChangeEventArgs e2 = new ZoomChangeEventArgs(zoomItem.ZoomMode, zoomItem.ZoomPercent);
                 this.ZoomChange(this, e2);
             }
+        }
+
+        private void OnThemeItemClicked(object sender, ToolStripItemClickedEventArgs e)
+        {
+            m_theme = e.ClickedItem == darkTheme
+                ? ReportViewerTheme.Dark
+                : e.ClickedItem == highContrastTheme ? ReportViewerTheme.HighContrast : ReportViewerTheme.Light;
+            ThemeChange?.Invoke(this, EventArgs.Empty);
         }
 
         private void OnZoomIn_Click(object sender, EventArgs e)
@@ -742,6 +790,17 @@ namespace Microsoft.Reporting.WinForms
             }
         }
 
+        internal void FocusSearch()
+        {
+            if (!textToFind.Visible || !textToFind.Enabled)
+            {
+                return;
+            }
+
+            textToFind.TextBox.Focus();
+            textToFind.TextBox.SelectAll();
+        }
+
         private void PopulateExportList()
         {
             RenderingExtension[] extensions = ViewerControl.Report.ListRenderingExtensions();
@@ -779,12 +838,37 @@ namespace Microsoft.Reporting.WinForms
 
         private void find_Click(object sender, EventArgs e)
         {
+            RememberSearch();
             OnSearch(sender, new SearchEventArgs(textToFind.Text, ViewerControl.CurrentPage, isFindNext: false));
         }
 
         private void findNext_Click(object sender, EventArgs e)
         {
+            RememberSearch();
             OnSearch(sender, new SearchEventArgs(textToFind.Text, ViewerControl.CurrentPage, isFindNext: true));
+        }
+
+        private void RememberSearch()
+        {
+            var searchText = textToFind.Text.Trim();
+            if (searchText.Length == 0)
+            {
+                return;
+            }
+
+            for (var i = m_searchHistory.Count - 1; i >= 0; i--)
+            {
+                if (string.Equals(m_searchHistory[i], searchText, StringComparison.OrdinalIgnoreCase))
+                {
+                    m_searchHistory.RemoveAt(i);
+                }
+            }
+
+            m_searchHistory.Insert(0, searchText);
+            while (m_searchHistory.Count > 10)
+            {
+                m_searchHistory.RemoveAt(m_searchHistory.Count - 1);
+            }
         }
 
         private void textToFind_TextChanged(object sender, EventArgs e)

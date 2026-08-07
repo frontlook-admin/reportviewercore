@@ -94,6 +94,19 @@ public sealed class ReportCompilerUtilityTests
     }
 
     [Fact]
+    public void ParseArguments_SupportsBatchValidationAndOpenExportOptions()
+    {
+        var parameters = Parse(
+            "--BatchFile", "commands.txt",
+            "--Validate",
+            "--OpenExport");
+
+        Assert.Equal("commands.txt", parameters["BatchFile"]);
+        Assert.Equal("true", parameters["Validate"]);
+        Assert.Equal("true", parameters["OpenExport"]);
+    }
+
+    [Fact]
     public void ParseArguments_AllowsBooleanOptionsWithoutValues()
     {
         var parameters = Parse(
@@ -134,6 +147,19 @@ public sealed class ReportCompilerUtilityTests
         var exception = Assert.Throws<ArgumentException>(() => ReportCompilerUtility.GetExportFormat());
 
         Assert.Contains("Unsupported export format", exception.Message);
+    }
+
+    [Theory]
+    [InlineData(typeof(ArgumentException), 2)]
+    [InlineData(typeof(FileNotFoundException), 3)]
+    [InlineData(typeof(InvalidDataException), 4)]
+    [InlineData(typeof(OperationCanceledException), 5)]
+    [InlineData(typeof(InvalidOperationException), 1)]
+    public void GetExitCode_MapsFailureCategories(Type exceptionType, int expectedCode)
+    {
+        var exception = (Exception)Activator.CreateInstance(exceptionType)!;
+
+        Assert.Equal(expectedCode, ReportCompilerUtility.GetExitCode(exception));
     }
 
     [Fact]

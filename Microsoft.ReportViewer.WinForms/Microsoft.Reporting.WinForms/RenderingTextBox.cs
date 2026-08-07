@@ -18,6 +18,8 @@ namespace Microsoft.Reporting.WinForms
 
 		private GdiContext m_context;
 
+		private GdiContext m_reportContext;
+
 		private RectangleF m_textPosition;
 
 		private RectangleF m_toggleRectangleMM = RectangleF.Empty;
@@ -78,7 +80,8 @@ namespace Microsoft.Reporting.WinForms
 			}
 		}
 
-		Color ITextBoxProps.BackgroundColor => SharedRenderer.GetReportColorStyle(InstanceProperties.Style, 34);
+		Color ITextBoxProps.BackgroundColor => m_reportContext?.TransformReportBackground(SharedRenderer.GetReportColorStyle(InstanceProperties.Style, 34))
+			?? SharedRenderer.GetReportColorStyle(InstanceProperties.Style, 34);
 
 		bool ITextBoxProps.CanGrow => ((RPLTextBoxPropsDef)DefinitionProperties).CanGrow;
 
@@ -201,6 +204,7 @@ namespace Microsoft.Reporting.WinForms
 
 		internal override void ProcessRenderingElementContent(RPLElement rplElement, GdiContext context, RectangleF bounds)
 		{
+			m_reportContext = context;
 			RPLTextBox rPLTextBox = rplElement as RPLTextBox;
 			RPLTextBoxPropsDef rPLTextBoxPropsDef = DefinitionProperties as RPLTextBoxPropsDef;
 			RPLTextBoxProps rPLTextBoxProps = InstanceProperties as RPLTextBoxProps;
