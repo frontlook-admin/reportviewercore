@@ -3,6 +3,7 @@ using FrontLookCoreDbAccessLibrary.Desktop.Rdlc.FL_RDLC;
 using Microsoft.Reporting.WinForms;
 using System;
 using System.IO;
+using System.Text.Json;
 using Xunit;
 
 namespace RdlcCliReportCompiler.Tests;
@@ -79,6 +80,20 @@ public sealed class ReportCompilerUtilityTests
     }
 
     [Fact]
+    public void ParseArguments_SupportsVerboseFileLoggingAndContinuationOptions()
+    {
+        var parameters = Parse(
+            "--Verbose", "true",
+            "--LogFile", "logs\\compiler.jsonl",
+            "--ContinueOnError", "false",
+            "--Mode", "Preview");
+
+        Assert.Equal("true", parameters["Verbose"]);
+        Assert.Equal("logs\\compiler.jsonl", parameters["LogFile"]);
+        Assert.Equal("false", parameters["ContinueOnError"]);
+    }
+
+    [Fact]
     public void ParseArguments_AllowsBooleanOptionsWithoutValues()
     {
         var parameters = Parse(
@@ -119,6 +134,34 @@ public sealed class ReportCompilerUtilityTests
         var exception = Assert.Throws<ArgumentException>(() => ReportCompilerUtility.GetExportFormat());
 
         Assert.Contains("Unsupported export format", exception.Message);
+    }
+
+    [Fact]
+    public void LogError_WritesStructuredJsonLogFile()
+    {
+        var logFile = Path.Combine(Path.GetTempPath(), $"rdlc-cli-{Guid.NewGuid():N}.jsonl");
+        try
+        {
+            Parse(
+                "--LogFile", logFile,
+                "--EnableErrorLogging", "true",
+                "--Mode", "Preview");
+
+            ReportCompilerUtility.LogError(new InvalidOperationException("test failure"));
+
+            var line = File.ReadAllLines(logFile).Single();
+            using var document = JsonDocument.Parse(line);
+            Assert.Equal("Error", document.RootElement.GetProperty("level").GetString());
+            Assert.Equal("error", document.RootElement.GetProperty("event").GetString());
+            Assert.Contains("test failure", document.RootElement.GetProperty("exception").GetString());
+        }
+        finally
+        {
+            if (File.Exists(logFile))
+            {
+                File.Delete(logFile);
+            }
+        }
     }
 
     [Fact]

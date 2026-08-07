@@ -6,9 +6,11 @@ using Microsoft.ReportViewer.WinForms.FrontLookCode;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -29,6 +31,10 @@ namespace CliReportCompiler
         private const string ExportMode = "EXPORT";
         private const string WaitForViewerOption = "WaitForViewer";
         private const string EnableErrorLoggingOption = "EnableErrorLogging";
+        private const string VerboseOption = "Verbose";
+        private const string LogFileOption = "LogFile";
+        private const string ContinueOnErrorOption = "ContinueOnError";
+        private const string VersionOption = "Version";
 
         private const string UsageText = @"Usage: CliReportCompiler.exe options
 Options:
@@ -42,6 +48,10 @@ Options:
   --PrintSetupFile|-psf     Path to the print setup file (JSON).
   --WaitForViewer|-wfv      Wait for the viewer to close: true or false. Default: true.
   --EnableErrorLogging|-el  Include detailed exception information in CLI error logs: true or false.
+  --Verbose|-v              Write lifecycle details to the console and log file.
+  --LogFile|-lf             Write structured JSONL logs to this file.
+  --ContinueOnError|-coe    Continue interactive input after an error: true or false. Default: true.
+  --Version|--ver|-ver      Display compiler and ReportViewer versions.
   --Test|-t                 Test message (for debugging purposes).
   --Demo|-d                 Run a demo of the ReportViewer.
   --Help|-h                 Display this help message.
@@ -66,6 +76,9 @@ Example:
                 ["PrintSetupFile"] = "psf",
                 [WaitForViewerOption] = "wfv",
                 [EnableErrorLoggingOption] = "el",
+                [VerboseOption] = "v",
+                [LogFileOption] = "lf",
+                [ContinueOnErrorOption] = "coe",
                 ["Test"] = "t"
             };
 
@@ -147,6 +160,12 @@ Example:
                 return false;
             }
 
+            if (HasArgument(args, $"--{VersionOption}", "--ver", "-ver"))
+            {
+                ShowVersion();
+                return false;
+            }
+
             if (HasArgument(args, "--DEMO", "-D", "DEMO", "D"))
             {
                 RunDemo();
@@ -219,14 +238,32 @@ Example:
                     if (ParseArguments(args))
                     {
                         Execute();
+                        Environment.ExitCode = 0;
                     }
                 }
                 catch (Exception ex)
                 {
                     ShowUsage();
                     LogError(ex, GetErrorLoggingEnabled());
+                    Environment.ExitCode = 1;
+
+                    if (!GetContinueOnError())
+                    {
+                        return;
+                    }
                 }
             }
+        }
+
+        /// <summary>
+        /// Displays the compiler and ReportViewer assembly versions.
+        /// </summary>
+        public static void ShowVersion()
+        {
+            var compilerVersion = typeof(ReportCompilerUtility).Assembly.GetName().Version?.ToString() ?? "unknown";
+            var viewerVersion = typeof(ReportViewer).Assembly.GetName().Version?.ToString() ?? "unknown";
+            Console.WriteLine($"CliReportCompiler {compilerVersion}");
+            Console.WriteLine($"ReportViewer {viewerVersion}");
         }
 
         /// <summary>
@@ -274,6 +311,10 @@ Example:
         /// </summary>
         public static void Execute()
         {
+            var stopwatch = Stopwatch.StartNew();
+            var reportPath = GetOptionalParameter("ReportPath");
+            LogInfo("execution_started", reportPath);
+
             if (GetParameters.TryGetValue("Test", out var testValue) && !string.IsNullOrEmpty(testValue))
             {
                 Console.WriteLine($"Test: {testValue}");
@@ -288,7 +329,16 @@ Example:
                 throw new ArgumentException($"Missing required parameters: {string.Join(", ", missingParameters)}");
             }
 
-            ProcessReport(GetWaitForViewer(), GetErrorLoggingEnabled());
+            try
+            {
+                ProcessReport(GetWaitForViewer(), GetErrorLoggingEnabled());
+                LogInfo("execution_succeeded", reportPath, stopwatch.Elapsed);
+            }
+            catch
+            {
+                LogInfo("execution_failed", reportPath, stopwatch.Elapsed);
+                throw;
+            }
         }
 
         /// <summary>
@@ -306,6 +356,9 @@ Example:
             var reportName = GetRequiredParameter("ReportName");
             var mode = GetRequiredParameter("Mode");
             var printSetupFile = GetRequiredParameter("PrintSetupFile");
+            var logFile = GetOptionalParameter(LogFileOption);
+
+            LogInfo("report_started", reportPath, null, new { Mode = mode, ReportName = reportName });
 
             ValidateFilesExist(reportPath, dataSourcePath);
             var dataSet = LoadDataset(dataSourcePath);
@@ -328,13 +381,13 @@ Example:
                 switch (mode.Trim().ToUpperInvariant())
                 {
                     case PreviewMode:
-                        PreviewReport(report, waitForViewer, enableErrorLogging);
+                        PreviewReport(report, waitForViewer, enableErrorLogging, logFile);
                         reportOwnershipTransferred = !waitForViewer;
                         break;
                     case PrintSetupMode:
                     case PrintSettingsMode:
                         report.AltTriggerPrintSettings = true;
-                        PreviewReport(report, waitForViewer, enableErrorLogging);
+                        PreviewReport(report, waitForViewer, enableErrorLogging, logFile);
                         reportOwnershipTransferred = !waitForViewer;
                         break;
                     case PrintMode:
@@ -480,6 +533,11 @@ Example:
         /// <param name="enableErrorLogging">When true, writes detailed viewer exceptions to the CLI.</param>
         public static void PreviewReport(FL_IRdlcReport report, bool waitForViewer, bool enableErrorLogging = false)
         {
+            PreviewReport(report, waitForViewer, enableErrorLogging, GetOptionalParameter(LogFileOption));
+        }
+
+        private static void PreviewReport(FL_IRdlcReport report, bool waitForViewer, bool enableErrorLogging, string logFile)
+        {
             ArgumentNullException.ThrowIfNull(report);
 
             if (waitForViewer)
@@ -489,7 +547,7 @@ Example:
                 return;
             }
 
-            LaunchViewer(report, enableErrorLogging);
+            LaunchViewer(report, enableErrorLogging, logFile);
         }
 
         /// <summary>
@@ -518,17 +576,49 @@ Example:
         /// </summary>
         public static void ExportReport(FL_IRdlcReport report)
         {
-            var exportPath = GetRequiredParameter("ExportPath");
+            var requestedExportPath = GetRequiredParameter("ExportPath");
+            var exportPath = Path.GetFullPath(requestedExportPath);
             report.ExportFormat = GetExportFormat();
-            report.ExportFileName = exportPath;
 
             var exportDirectory = Path.GetDirectoryName(exportPath);
-            if (!string.IsNullOrEmpty(exportDirectory))
+            if (string.IsNullOrEmpty(exportDirectory))
             {
-                Directory.CreateDirectory(exportDirectory);
+                throw new ArgumentException("ExportPath must include a valid output file name.");
             }
 
-            report.Export();
+            Directory.CreateDirectory(exportDirectory);
+            var temporaryExportPath = Path.Combine(
+                exportDirectory,
+                $".{Path.GetFileName(exportPath)}.{Guid.NewGuid():N}.tmp");
+
+            try
+            {
+                report.ExportFileName = temporaryExportPath;
+                LogInfo("export_started", exportPath, null, new { Format = report.ExportFormat.ToString() });
+                report.Export();
+
+                if (!File.Exists(temporaryExportPath))
+                {
+                    throw new IOException($"Export did not create an output file: {temporaryExportPath}");
+                }
+
+                var fileInfo = new FileInfo(temporaryExportPath);
+                if (fileInfo.Length == 0)
+                {
+                    throw new IOException("Export created an empty output file.");
+                }
+
+                File.Move(temporaryExportPath, exportPath, overwrite: true);
+                report.ExportFileName = exportPath;
+                LogInfo("export_succeeded", exportPath, null, new { Bytes = fileInfo.Length });
+            }
+            finally
+            {
+                if (File.Exists(temporaryExportPath))
+                {
+                    File.Delete(temporaryExportPath);
+                }
+            }
         }
 
         /// <summary>
@@ -557,10 +647,10 @@ Example:
             LogError(exception, GetErrorLoggingEnabled());
         }
 
-        private static void LaunchViewer(FL_IRdlcReport report, bool enableErrorLogging)
+        private static void LaunchViewer(FL_IRdlcReport report, bool enableErrorLogging, string logFile)
         {
             var viewerReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var viewerThread = new Thread(() => RunViewer(report, enableErrorLogging, viewerReady))
+            var viewerThread = new Thread(() => RunViewer(report, enableErrorLogging, logFile, viewerReady))
             {
                 IsBackground = false,
                 Name = $"RDLC viewer: {report.ReportName}"
@@ -573,6 +663,7 @@ Example:
         private static void RunViewer(
             FL_IRdlcReport report,
             bool enableErrorLogging,
+            string logFile,
             TaskCompletionSource<bool> viewerReady)
         {
             try
@@ -584,7 +675,7 @@ Example:
             }
             catch (Exception ex)
             {
-                LogError(ex, enableErrorLogging, report.ReportFile);
+                LogError(ex, enableErrorLogging, report.ReportFile, logFile);
             }
             finally
             {
@@ -624,7 +715,9 @@ Example:
         private static bool IsBooleanOption(string parameterName)
         {
             return string.Equals(parameterName, WaitForViewerOption, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(parameterName, EnableErrorLoggingOption, StringComparison.OrdinalIgnoreCase);
+                || string.Equals(parameterName, EnableErrorLoggingOption, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(parameterName, VerboseOption, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(parameterName, ContinueOnErrorOption, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void ValidateBooleanOption(string parameterName, string value)
@@ -643,6 +736,21 @@ Example:
         private static bool GetErrorLoggingEnabled()
         {
             return GetBooleanParameter(EnableErrorLoggingOption, defaultValue: false);
+        }
+
+        private static bool GetVerboseLoggingEnabled()
+        {
+            return GetBooleanParameter(VerboseOption, defaultValue: false);
+        }
+
+        private static bool GetContinueOnError()
+        {
+            return GetBooleanParameter(ContinueOnErrorOption, defaultValue: true);
+        }
+
+        private static string GetLogFilePath()
+        {
+            return GetOptionalParameter(LogFileOption);
         }
 
         private static bool GetBooleanParameter(string parameterName, bool defaultValue)
@@ -693,11 +801,43 @@ Example:
             }
         }
 
-        private static void LogError(Exception exception, bool enableErrorLogging, string reportPath = null)
+        private static void LogInfo(string eventName, string reportPath, TimeSpan? duration = null, object details = null)
+        {
+            var logFile = GetLogFilePath();
+            if (!GetVerboseLoggingEnabled() && string.IsNullOrWhiteSpace(logFile))
+            {
+                return;
+            }
+
+            var message = eventName;
+            if (GetVerboseLoggingEnabled())
+            {
+                if (!string.IsNullOrWhiteSpace(reportPath))
+                {
+                    message += $" report='{reportPath}'";
+                }
+
+                if (duration.HasValue)
+                {
+                    message += $" durationMs={duration.Value.TotalMilliseconds:0}";
+                }
+
+                lock (ConsoleSync)
+                {
+                    Console.WriteLine($"[Info] {message}");
+                }
+            }
+
+            WriteStructuredLog("Info", eventName, reportPath, message, null, duration, details, logFile);
+        }
+
+        private static void LogError(Exception exception, bool enableErrorLogging, string reportPath = null, string logFile = null)
         {
             var context = string.IsNullOrWhiteSpace(reportPath)
                 ? string.Empty
                 : $" for report '{reportPath}'";
+
+            logFile ??= GetLogFilePath();
 
             lock (ConsoleSync)
             {
@@ -708,6 +848,74 @@ Example:
                 else
                 {
                     Console.Error.WriteLine($"Error{context}: {exception.Message}");
+                }
+            }
+
+            WriteStructuredLog("Error", "error", reportPath, exception.Message, exception, null, null, logFile);
+        }
+
+        private static void WriteStructuredLog(
+            string level,
+            string eventName,
+            string reportPath,
+            string message,
+            Exception exception,
+            TimeSpan? duration,
+            object details,
+            string logFile)
+        {
+            if (string.IsNullOrWhiteSpace(logFile))
+            {
+                return;
+            }
+
+            try
+            {
+                var record = new Dictionary<string, object>
+                {
+                    ["timestamp"] = DateTimeOffset.UtcNow,
+                    ["level"] = level,
+                    ["event"] = eventName,
+                    ["message"] = message
+                };
+
+                if (!string.IsNullOrWhiteSpace(reportPath))
+                {
+                    record["reportPath"] = reportPath;
+                }
+
+                if (duration.HasValue)
+                {
+                    record["durationMs"] = duration.Value.TotalMilliseconds;
+                }
+
+                if (details != null)
+                {
+                    record["details"] = details;
+                }
+
+                if (exception != null)
+                {
+                    record["exception"] = exception.ToString();
+                }
+
+                var fullLogFile = Path.GetFullPath(logFile);
+                var directory = Path.GetDirectoryName(fullLogFile);
+                if (!string.IsNullOrWhiteSpace(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                lock (ConsoleSync)
+                {
+                    File.AppendAllText(fullLogFile, JsonSerializer.Serialize(record) + Environment.NewLine);
+                }
+            }
+            catch (Exception logException)
+            {
+                lock (ConsoleSync)
+                {
+                    Console.Error.WriteLine($"Unable to write log file '{logFile}': {logException.Message}");
                 }
             }
         }
@@ -752,6 +960,13 @@ Example:
             }
 
             return value;
+        }
+
+        private static string GetOptionalParameter(string parameterName)
+        {
+            return GetParameters.TryGetValue(parameterName, out var value) && !string.IsNullOrWhiteSpace(value)
+                ? value
+                : null;
         }
 
         private static void AddCurrentPart(ICollection<string> parts, StringBuilder currentPart)
