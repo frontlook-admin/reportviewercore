@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Text.RegularExpressions;
+using Microsoft.Reporting.WinForms;
 using ReportViewerControl = Microsoft.Reporting.WinForms.ReportViewer;
 
 namespace Microsoft.ReportViewer.WinForms.Tests
@@ -386,6 +387,28 @@ namespace Microsoft.ReportViewer.WinForms.Tests
             using var reportViewer = new ReportViewerControl();
             reportViewer.LocalReport.DisplayName = "SalesReport.rdlc";
 
+            reportViewer.PrintSettingFilePath.Should().Be(
+                Path.Combine(AppContext.BaseDirectory, "RdlcPrintSetting", "SalesReport.json"));
+        }
+
+        [Fact]
+        public void ReportViewer_DefaultTheme_IsLight()
+        {
+            using var reportViewer = new ReportViewerControl();
+
+            reportViewer.Theme.ToolbarBackground.Should().Be(Color.FromArgb(248, 250, 252));
+            reportViewer.Theme.CanvasBackground.Should().Be(Color.FromArgb(243, 246, 250));
+        }
+
+        [Fact]
+        public void ReportViewer_CanApplyDarkThemeWithoutChangingReportSettings()
+        {
+            using var reportViewer = new ReportViewerControl();
+            reportViewer.LocalReport.DisplayName = "SalesReport.rdlc";
+
+            reportViewer.Theme = ReportViewerTheme.Dark;
+
+            reportViewer.Theme.ToolbarBackground.Should().Be(Color.FromArgb(35, 40, 48));
             reportViewer.PrintSettingFilePath.Should().Be(
                 Path.Combine(AppContext.BaseDirectory, "RdlcPrintSetting", "SalesReport.json"));
         }

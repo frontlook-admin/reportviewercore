@@ -453,6 +453,10 @@ namespace Microsoft.Reporting.WinForms
 		{
 			private ReportPanel m_host;
 
+			private Pen m_pageBorderPen = new Pen(ReportViewerTheme.Light.PageBorder);
+
+			private SolidBrush m_pageShadowBrush = new SolidBrush(ReportViewerTheme.Light.PageShadow);
+
 			private ReportToolTip m_lastToolTip;
 
 			private ToolTip m_toolTipControl;
@@ -478,6 +482,30 @@ namespace Microsoft.Reporting.WinForms
 				m_toolTipControl = new ToolTip();
 				m_toolTipControl.UseFading = true;
 				m_toolTipControl.UseAnimation = true;
+			}
+
+			internal void ApplyTheme(ReportViewerTheme theme)
+			{
+				theme = theme ?? ReportViewerTheme.Light;
+				Pen pageBorderPen = new Pen(theme.PageBorder);
+				SolidBrush pageShadowBrush = new SolidBrush(theme.PageShadow);
+				m_pageBorderPen.Dispose();
+				m_pageShadowBrush.Dispose();
+				m_pageBorderPen = pageBorderPen;
+				m_pageShadowBrush = pageShadowBrush;
+				BackColor = theme.CanvasBackground;
+				Invalidate();
+			}
+
+			protected override void Dispose(bool disposing)
+			{
+				if (disposing)
+				{
+					m_pageBorderPen.Dispose();
+					m_pageShadowBrush.Dispose();
+					m_toolTipControl?.Dispose();
+				}
+				base.Dispose(disposing);
 			}
 
 			private float GetZoomRate()
@@ -546,13 +574,13 @@ namespace Microsoft.Reporting.WinForms
 			{
 				float num = -1f;
 				float num2 = -1f;
-				Pen black = Pens.Black;
-				g.DrawLine(black, num, num2, width, num2);
-				g.DrawLine(black, num, num2, num, height);
-				g.DrawLine(black, width, num2, width, height + 1f);
-				g.DrawLine(black, width + 1f, num2 + 1f, width + 1f, height + 1f);
-				g.DrawLine(black, num, height, width, height);
-				g.DrawLine(black, num + 1f, height + 1f, width + 1f, height + 1f);
+				Pen pageBorderPen = m_pageBorderPen;
+				g.DrawLine(pageBorderPen, num, num2, width, num2);
+				g.DrawLine(pageBorderPen, num, num2, num, height);
+				g.DrawLine(pageBorderPen, width, num2, width, height + 1f);
+				g.DrawLine(pageBorderPen, width + 1f, num2 + 1f, width + 1f, height + 1f);
+				g.DrawLine(pageBorderPen, num, height, width, height);
+				g.DrawLine(pageBorderPen, num + 1f, height + 1f, width + 1f, height + 1f);
 			}
 
 			public void RecalculateSize()
@@ -625,6 +653,10 @@ namespace Microsoft.Reporting.WinForms
 				PointF pointF = default(PointF);
 				pointF.X = (float)point.X / zoomRate;
 				pointF.Y = (float)point.Y / zoomRate;
+				if (CurrentPage.NeedsFrame)
+				{
+					g.Clear(m_host.m_theme.CanvasBackground);
+				}
 				if (CurrentPage.DrawInPixels)
 				{
 					g.TranslateTransform(pointF.X, pointF.Y);
@@ -635,7 +667,9 @@ namespace Microsoft.Reporting.WinForms
 				}
 				if (CurrentPage.NeedsFrame)
 				{
-					g.Clear(Color.Gray);
+					float pageWidth = unzoomedSize.Width - 2f * num;
+					float pageHeight = unzoomedSize.Height - 2f * num;
+					g.FillRectangle(m_pageShadowBrush, -2f, -2f, pageWidth + 4f, pageHeight + 4f);
 				}
 				PointF scrollOffset = new PointF(m_host.AutoScrollPosition.X, m_host.AutoScrollPosition.Y);
 				if (!CurrentPage.DrawInPixels)
@@ -722,6 +756,8 @@ namespace Microsoft.Reporting.WinForms
 		}
 
 		private bool m_showContextMenu = true;
+
+		private ReportViewerTheme m_theme = ReportViewerTheme.Light;
 
 		private bool m_inLongRunningAction;
 
@@ -989,12 +1025,36 @@ namespace Microsoft.Reporting.WinForms
 		{
 			if (!m_inLongRunningAction && m_currentPage != null)
 			{
+				if ((Control.ModifierKeys & Keys.Control) == Keys.Control)
+				{
+					ZoomWithMouseWheel(e.Delta);
+					return;
+				}
+
 				ScrollReport(e.Delta < 0);
 				if (m_currentPage.IsRequireFullRedraw)
 				{
 					m_renderPanel.Invalidate();
 				}
 			}
+		}
+
+		private void ZoomWithMouseWheel(int delta)
+		{
+			if (delta == 0 || ZoomChange == null || ViewerControl == null)
+			{
+				return;
+			}
+
+			int zoomPercent = ViewerControl.ZoomPercent + (delta > 0 ? 10 : -10);
+			zoomPercent = Math.Max(10, Math.Min(400, zoomPercent));
+			if (ViewerControl.ZoomMode == ZoomMode.Percent && zoomPercent == ViewerControl.ZoomPercent)
+			{
+				return;
+			}
+
+			ZoomChangeEventArgs zoomChange = new ZoomChangeEventArgs(ZoomMode.Percent, zoomPercent);
+			ZoomChange(this, zoomChange);
 		}
 
 		private void OnMouseClick(object sender, MouseEventArgs e)
@@ -1134,6 +1194,19 @@ namespace Microsoft.Reporting.WinForms
 		internal void SetToolStripRenderer(ToolStripRenderer renderer)
 		{
 			m_contextMenu.Renderer = renderer;
+		}
+
+		internal void ApplyTheme(ReportViewerTheme theme, ToolStripRenderer renderer)
+		{
+			m_theme = theme ?? ReportViewerTheme.Light;
+			BackColor = m_theme.CanvasBackground;
+			m_renderPanel.BackColor = m_theme.CanvasBackground;
+			m_renderPanel.ApplyTheme(m_theme);
+			if (renderer != null)
+			{
+				m_contextMenu.Renderer = renderer;
+			}
+			Invalidate(true);
 		}
 
 		internal void ApplyCustomResources()

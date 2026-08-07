@@ -69,7 +69,10 @@ namespace Microsoft.Reporting.WinForms
 			set
 			{
 				base.BackColor = value;
-				m_errorBox.BackColor = value;
+				if (m_errorBox != null)
+				{
+					m_errorBox.BackColor = value;
+				}
 				if (m_reportPanel != null)
 				{
 					m_reportPanel.BackColor = value;
@@ -245,7 +248,7 @@ namespace Microsoft.Reporting.WinForms
 			m_errorBox.TabStop = true;
 			m_errorBox.Size = new Size(663, 397);
 			m_errorBox.TabIndex = 1;
-			m_errorBox.TextAlign = HorizontalAlignment.Center;
+			m_errorBox.TextAlign = HorizontalAlignment.Left;
 			m_errorBox.Visible = false;
 				BackColor = System.Drawing.Color.FromArgb(243, 246, 250);
 			AutoScroll = true;
@@ -346,6 +349,22 @@ namespace Microsoft.Reporting.WinForms
 		internal void SetToolStripRenderer(ToolStripRenderer renderer)
 		{
 			m_reportPanel.SetToolStripRenderer(renderer);
+		}
+
+		internal void ApplyTheme(ReportViewerTheme theme, ToolStripRenderer renderer)
+		{
+			theme = theme ?? ReportViewerTheme.Light;
+			base.BackColor = theme.CanvasBackground;
+			if (m_errorBox != null)
+			{
+				m_errorBox.BackColor = theme.ErrorBackground;
+				m_errorBox.ForeColor = theme.ErrorForeground;
+			}
+			if (m_reportPanel != null)
+			{
+				m_reportPanel.ApplyTheme(theme, renderer);
+			}
+			Invalidate(true);
 		}
 	}
 }

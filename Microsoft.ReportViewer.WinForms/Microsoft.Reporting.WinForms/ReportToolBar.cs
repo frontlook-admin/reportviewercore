@@ -51,6 +51,8 @@ namespace Microsoft.Reporting.WinForms
         private ToolStripButton printerPageSettings;
         private ToolStripDropDownButton export;
 
+        private ReportViewerTheme m_theme = ReportViewerTheme.Light;
+
 		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
 		public override Size MinimumSize
 		{
@@ -203,6 +205,26 @@ namespace Microsoft.Reporting.WinForms
         internal void SetToolStripRenderer(ToolStripRenderer renderer)
         {
             toolStrip1.Renderer = renderer;
+        }
+
+        internal void ApplyTheme(ReportViewerTheme theme, ToolStripRenderer renderer)
+        {
+            m_theme = theme ?? ReportViewerTheme.Light;
+            if (renderer != null)
+            {
+                toolStrip1.Renderer = renderer;
+            }
+
+            BackColor = m_theme.ToolbarBackground;
+            toolStrip1.BackColor = m_theme.ToolbarBackground;
+            toolStrip1.ForeColor = m_theme.Foreground;
+            currentPage.TextBox.BackColor = m_theme.InputBackground;
+            currentPage.TextBox.ForeColor = m_theme.Foreground;
+            zoom.ComboBox.BackColor = m_theme.InputBackground;
+            zoom.ComboBox.ForeColor = m_theme.Foreground;
+            textToFind.TextBox.BackColor = m_theme.InputBackground;
+            textToFind.TextBox.ForeColor = m_theme.Foreground;
+            Invalidate(true);
         }
 
         private Size GetIdealSize()
@@ -506,11 +528,11 @@ namespace Microsoft.Reporting.WinForms
         {
             toolStrip1.AutoSize = true;
             toolStrip1.CanOverflow = true;
-            toolStrip1.ImageScalingSize = new Size(18, 18);
+            toolStrip1.ImageScalingSize = new Size(20, 20);
             toolStrip1.Padding = new Padding(8, 4, 8, 4);
-            toolStrip1.Renderer = new ModernReportToolStripRenderer();
-            toolStrip1.BackColor = Color.FromArgb(248, 250, 252);
-            toolStrip1.ForeColor = Color.FromArgb(38, 46, 56);
+            toolStrip1.Renderer = new ModernReportToolStripRenderer(m_theme);
+            toolStrip1.BackColor = m_theme.ToolbarBackground;
+            toolStrip1.ForeColor = m_theme.Foreground;
 
             foreach (ToolStripItem item in toolStrip1.Items)
             {
@@ -518,24 +540,27 @@ namespace Microsoft.Reporting.WinForms
                 if (item is ToolStripButton button && button.DisplayStyle == ToolStripItemDisplayStyle.Image)
                 {
                     button.AutoSize = false;
-                    button.Size = new Size(30, 30);
+                    button.Size = new Size(32, 32);
                 }
             }
 
             currentPage.AutoSize = false;
             currentPage.Width = 52;
             currentPage.TextBox.BorderStyle = BorderStyle.FixedSingle;
-            currentPage.TextBox.BackColor = Color.White;
+            currentPage.TextBox.BackColor = m_theme.InputBackground;
+            currentPage.TextBox.ForeColor = m_theme.Foreground;
 
             zoom.AutoSize = false;
             zoom.Width = 112;
             zoom.ComboBox.FlatStyle = FlatStyle.Flat;
-            zoom.ComboBox.BackColor = Color.White;
+            zoom.ComboBox.BackColor = m_theme.InputBackground;
+            zoom.ComboBox.ForeColor = m_theme.Foreground;
 
             textToFind.AutoSize = false;
             textToFind.Width = 160;
             textToFind.TextBox.BorderStyle = BorderStyle.FixedSingle;
-            textToFind.TextBox.BackColor = Color.White;
+            textToFind.TextBox.BackColor = m_theme.InputBackground;
+            textToFind.TextBox.ForeColor = m_theme.Foreground;
         }
 
         private void OnZoomChanged(object sender, EventArgs e)

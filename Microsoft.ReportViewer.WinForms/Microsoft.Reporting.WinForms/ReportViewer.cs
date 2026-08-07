@@ -121,6 +121,8 @@ namespace Microsoft.Reporting.WinForms
 
         private Queue<MethodInvoker> m_pendingAsyncInvokes = new Queue<MethodInvoker>();
 
+        private ReportViewerTheme m_theme = ReportViewerTheme.Light;
+
         private ToolStripRenderer m_toolStripRenderer = new ModernReportToolStripRenderer();
 
         private ReportViewerStatus m_status;
@@ -169,6 +171,22 @@ namespace Microsoft.Reporting.WinForms
             {
                 base.BackColor = value;
                 winRSviewer.BackColor = value;
+            }
+        }
+
+        [Category("Appearance")]
+        [Description("Colors used by the report viewer toolbar, canvas, and report page.")]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public ReportViewerTheme Theme
+        {
+            get
+            {
+                return m_theme;
+            }
+            set
+            {
+                m_theme = value ?? ReportViewerTheme.Light;
+                ApplyTheme();
             }
         }
 
@@ -672,6 +690,27 @@ namespace Microsoft.Reporting.WinForms
             }
         }
 
+        private void ApplyTheme()
+        {
+            if (reportToolBar == null || winRSviewer == null)
+            {
+                return;
+            }
+
+            if (m_toolStripRenderer is ModernReportToolStripRenderer)
+            {
+                m_toolStripRenderer = new ModernReportToolStripRenderer(m_theme);
+            }
+
+            base.BackColor = m_theme.CanvasBackground;
+            paramsSplitContainer.BackColor = m_theme.ToolbarBorder;
+            dmSplitContainer.BackColor = m_theme.ToolbarBorder;
+            rsParams.BackColor = m_theme.CanvasBackground;
+            rsDocMap.BackColor = m_theme.InputBackground;
+            reportToolBar.ApplyTheme(m_theme, m_toolStripRenderer);
+            winRSviewer.ApplyTheme(m_theme, m_toolStripRenderer);
+        }
+
         [Browsable(false)]
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public ReportViewerStatus CurrentStatus => m_status;
@@ -835,6 +874,7 @@ namespace Microsoft.Reporting.WinForms
             InitializeComponent();
             reportToolBar.SetToolStripRenderer(m_toolStripRenderer);
             winRSviewer.SetToolStripRenderer(m_toolStripRenderer);
+            ApplyTheme();
             reportToolBar.ViewerControl = this;
             rsParams.ViewerControl = this;
             winRSviewer.ViewerControl = this;
