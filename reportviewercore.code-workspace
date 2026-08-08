@@ -7,6 +7,9 @@
 			"path": "../FrontLookCore/FLReportViewerCore"
 		},
 		{
+			"path": "../FrontLookCore/FL_Reporter"
+		},
+		{
 			"path": "../FrontLookCore/FluentReportWriter"
 		},
 		{

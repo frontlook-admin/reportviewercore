@@ -76,8 +76,11 @@ namespace Microsoft.Reporting.WinForms
 			m_card.BorderColor = theme.ToolbarBorder;
 			m_loadingLabel.ForeColor = theme.Foreground;
 			m_brandLabel.ForeColor = theme.DisabledForeground;
-			m_progressBar.ApplyTheme(theme.Accent, theme.ToolbarBorder);
-			m_indicator.ApplyTheme(theme.Accent, theme.ToolbarBorder);
+			// ToolbarBorder is intentionally subtle in dark mode and is too close
+			// to the loading card background for the progress track to stand out.
+			// PageBorder provides the contrast needed by both loading indicators.
+			m_progressBar.ApplyTheme(theme.Accent, theme.PageBorder);
+			m_indicator.ApplyTheme(theme.Accent, theme.PageBorder);
 			Invalidate(true);
 		}
 
