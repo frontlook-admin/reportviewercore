@@ -60,6 +60,18 @@ namespace Microsoft.Reporting.WinForms
 			m_stack.Pop().Dispose();
 		}
 
+		public ReportInfo ReplaceTop(ReportInfo reportInfo)
+		{
+			if (reportInfo == null)
+			{
+				throw new ArgumentNullException(nameof(reportInfo));
+			}
+
+			ReportInfo current = m_stack.Pop();
+			m_stack.Push(reportInfo);
+			return current;
+		}
+
 		public ReportInfo Peek()
 		{
 			return m_stack.Peek();

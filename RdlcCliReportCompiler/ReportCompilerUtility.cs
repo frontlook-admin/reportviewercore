@@ -469,13 +469,13 @@ Example:
                 switch (mode.Trim().ToUpperInvariant())
                 {
                     case PreviewMode:
-                        PreviewReport(report, waitForViewer, enableErrorLogging, logFile);
+                        PreviewReport(report, waitForViewer, enableErrorLogging, logFile, dataSourcePath);
                         reportOwnershipTransferred = !waitForViewer;
                         break;
                     case PrintSetupMode:
                     case PrintSettingsMode:
                         report.AltTriggerPrintSettings = true;
-                        PreviewReport(report, waitForViewer, enableErrorLogging, logFile);
+                        PreviewReport(report, waitForViewer, enableErrorLogging, logFile, dataSourcePath);
                         reportOwnershipTransferred = !waitForViewer;
                         break;
                     case PrintMode:
@@ -674,16 +674,26 @@ Example:
 
         private static void PreviewReport(FL_IRdlcReport report, bool waitForViewer, bool enableErrorLogging, string logFile)
         {
+            PreviewReport(report, waitForViewer, enableErrorLogging, logFile, null);
+        }
+
+        private static void PreviewReport(
+            FL_IRdlcReport report,
+            bool waitForViewer,
+            bool enableErrorLogging,
+            string logFile,
+            string dataSourcePath)
+        {
             ArgumentNullException.ThrowIfNull(report);
 
             if (waitForViewer)
             {
-                using var form = new ReportForm.FL_RdlcReportViewerForm(report);
+                using var form = new ReportForm.FL_RdlcReportViewerForm(report, dataSourcePath);
                 form.ShowDialog();
                 return;
             }
 
-            LaunchViewer(report, enableErrorLogging, logFile);
+            LaunchViewer(report, enableErrorLogging, logFile, dataSourcePath);
         }
 
         /// <summary>
@@ -832,10 +842,19 @@ Example:
             LogError(exception, GetErrorLoggingEnabled());
         }
 
-        private static void LaunchViewer(FL_IRdlcReport report, bool enableErrorLogging, string logFile)
+        private static void LaunchViewer(
+            FL_IRdlcReport report,
+            bool enableErrorLogging,
+            string logFile,
+            string dataSourcePath)
         {
             var viewerReady = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var viewerThread = new Thread(() => RunViewer(report, enableErrorLogging, logFile, viewerReady))
+            var viewerThread = new Thread(() => RunViewer(
+                report,
+                enableErrorLogging,
+                logFile,
+                dataSourcePath,
+                viewerReady))
             {
                 IsBackground = false,
                 Name = $"RDLC viewer: {report.ReportName}"
@@ -849,12 +868,13 @@ Example:
             FL_IRdlcReport report,
             bool enableErrorLogging,
             string logFile,
+            string dataSourcePath,
             TaskCompletionSource<bool> viewerReady)
         {
             try
             {
                 Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
-                using var form = new ReportForm.FL_RdlcReportViewerForm(report);
+                using var form = new ReportForm.FL_RdlcReportViewerForm(report, dataSourcePath);
                 form.Shown += (_, _) => viewerReady.TrySetResult(true);
                 Application.Run(form);
             }

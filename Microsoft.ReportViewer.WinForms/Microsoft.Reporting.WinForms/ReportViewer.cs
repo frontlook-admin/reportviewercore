@@ -14,9 +14,11 @@ using System.Drawing;
 using System.Drawing.Printing;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using CancellationToken = System.Threading.CancellationToken;
+using CancellationTokenSource = System.Threading.CancellationTokenSource;
 using Interlocked = System.Threading.Interlocked;
 using Volatile = System.Threading.Volatile;
 using System.Windows.Forms;
@@ -86,6 +88,22 @@ namespace Microsoft.Reporting.WinForms
         private DisplayMode m_viewMode;
 
         private Timer m_autoRefreshTimer = new Timer();
+
+        private readonly ReportViewerLiveReloadOptions m_liveReload = new ReportViewerLiveReloadOptions();
+
+        private Timer m_liveReloadPollTimer;
+
+        private Timer m_liveReloadDebounceTimer;
+
+        private readonly List<FileSystemWatcher> m_liveReloadWatchers = new List<FileSystemWatcher>();
+
+        private CancellationTokenSource m_liveReloadCancellation;
+
+        private string m_liveReloadFingerprint;
+
+        private bool m_liveReloadCheckInProgress;
+
+        private bool m_liveReloadCheckQueued;
 
         private ProcessingThread m_processingThread = new ProcessingThread();
 
@@ -913,6 +931,10 @@ namespace Microsoft.Reporting.WinForms
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public ReportViewerStatus CurrentStatus => m_status;
 
+        [Category("Behavior")]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Content)]
+        public ReportViewerLiveReloadOptions LiveReload => m_liveReload;
+
         [SRDescription("KeepSessionAliveDesc")]
         [DefaultValue(true)]
         public bool KeepSessionAlive
@@ -1101,6 +1123,10 @@ namespace Microsoft.Reporting.WinForms
 
         public event EventHandler<ReportRenderProgress> RenderingProgress;
 
+        public event EventHandler LiveReloaded;
+
+        public event EventHandler<ReportViewerLiveReloadErrorEventArgs> LiveReloadError;
+
         [SRDescription("SearchEventDesc")]
         public event SearchEventHandler Search;
 
@@ -1134,6 +1160,7 @@ namespace Microsoft.Reporting.WinForms
             rsParams.ViewerControl = this;
             winRSviewer.ViewerControl = this;
             m_autoRefreshTimer.Tick += OnRefresh;
+            m_liveReload.Changed += OnLiveReloadOptionsChanged;
             RenderingProgress += OnRenderingProgress;
             Reset();
             SetZoom();
@@ -3459,9 +3486,462 @@ namespace Microsoft.Reporting.WinForms
             return CurrentReport.FileManager.CreatePage(operation == StreamOper.CreateAndRegister || operation == StreamOper.CreateForPersistedStreams);
         }
 
+        private void OnLiveReloadOptionsChanged(object sender, EventArgs e)
+        {
+            if (m_disposing || !IsHandleCreated || IsDisposed)
+            {
+                return;
+            }
+
+            try
+            {
+                BeginInvoke(new MethodInvoker(ConfigureLiveReload));
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+            catch (InvalidOperationException)
+            {
+            }
+        }
+
+        private void ConfigureLiveReload()
+        {
+            StopLiveReload();
+            if (m_disposing || !m_liveReload.Enabled)
+            {
+                return;
+            }
+
+            try
+            {
+                if (ProcessingMode != ProcessingMode.Local)
+                {
+                    throw new InvalidOperationException("Live reload is supported only for LocalReport.");
+                }
+
+                if (m_liveReload.ReloadAsync == null)
+                {
+                    throw new InvalidOperationException("LiveReload.ReloadAsync must be configured.");
+                }
+
+                if (GetLiveReloadPaths().Length == 0)
+                {
+                    throw new InvalidOperationException(
+                        "Configure LiveReload.ReportDefinitionPath or LiveReload.DataFilePaths.");
+                }
+
+                if (m_liveReload.PollInterval <= TimeSpan.Zero ||
+                    m_liveReload.DebounceDelay < TimeSpan.Zero ||
+                    m_liveReload.StabilityDelay < TimeSpan.Zero ||
+                    m_liveReload.MaxStableReadAttempts <= 0)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(LiveReload), "Live reload timing settings are invalid.");
+                }
+
+                m_liveReloadCancellation = new CancellationTokenSource();
+                m_liveReloadPollTimer = new Timer
+                {
+                    Interval = ToTimerInterval(m_liveReload.PollInterval)
+                };
+                m_liveReloadPollTimer.Tick += OnLiveReloadPollTick;
+                m_liveReloadPollTimer.Start();
+
+                m_liveReloadDebounceTimer = new Timer
+                {
+                    Interval = Math.Max(1, ToTimerInterval(m_liveReload.DebounceDelay))
+                };
+                m_liveReloadDebounceTimer.Tick += OnLiveReloadDebounceTick;
+
+                ConfigureLiveReloadWatchers();
+                QueueLiveReloadCheck();
+            }
+            catch (Exception exception)
+            {
+                StopLiveReload();
+                RaiseLiveReloadError(exception);
+            }
+        }
+
+        private void ConfigureLiveReloadWatchers()
+        {
+            foreach (var path in GetLiveReloadPaths())
+            {
+                var fullPath = Path.GetFullPath(path);
+                var directory = Path.GetDirectoryName(fullPath);
+                if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+                {
+                    continue;
+                }
+
+                var watcher = new FileSystemWatcher(directory, Path.GetFileName(fullPath))
+                {
+                    NotifyFilter = NotifyFilters.FileName |
+                        NotifyFilters.LastWrite |
+                        NotifyFilters.Size |
+                        NotifyFilters.CreationTime,
+                    IncludeSubdirectories = false,
+                    EnableRaisingEvents = true
+                };
+                watcher.Changed += OnLiveReloadFileEvent;
+                watcher.Created += OnLiveReloadFileEvent;
+                watcher.Deleted += OnLiveReloadFileEvent;
+                watcher.Renamed += OnLiveReloadFileRenamed;
+                m_liveReloadWatchers.Add(watcher);
+            }
+        }
+
+        private string[] GetLiveReloadPaths()
+        {
+            var paths = new List<string>();
+            var reportPath = m_liveReload.ReportDefinitionPath;
+            if (string.IsNullOrWhiteSpace(reportPath))
+            {
+                reportPath = LocalReport.ReportPath;
+            }
+
+            if (!string.IsNullOrWhiteSpace(reportPath))
+            {
+                paths.Add(reportPath);
+            }
+
+            paths.AddRange(m_liveReload.DataFilePaths ?? Array.Empty<string>());
+            return paths
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(Path.GetFullPath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        private void OnLiveReloadFileEvent(object sender, FileSystemEventArgs e)
+        {
+            QueueLiveReloadDebounce();
+        }
+
+        private void OnLiveReloadFileRenamed(object sender, RenamedEventArgs e)
+        {
+            QueueLiveReloadDebounce();
+        }
+
+        private void QueueLiveReloadDebounce()
+        {
+            if (m_disposing || m_liveReloadDebounceTimer == null || !IsHandleCreated)
+            {
+                return;
+            }
+
+            try
+            {
+                BeginInvoke(new MethodInvoker(() =>
+                {
+                    if (m_liveReloadDebounceTimer == null)
+                    {
+                        return;
+                    }
+
+                    m_liveReloadDebounceTimer.Stop();
+                    m_liveReloadDebounceTimer.Start();
+                }));
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+            catch (InvalidOperationException)
+            {
+            }
+        }
+
+        private void OnLiveReloadDebounceTick(object sender, EventArgs e)
+        {
+            m_liveReloadDebounceTimer?.Stop();
+            QueueLiveReloadCheck();
+        }
+
+        private void OnLiveReloadPollTick(object sender, EventArgs e)
+        {
+            QueueLiveReloadCheck();
+        }
+
+        private void QueueLiveReloadCheck()
+        {
+            if (m_disposing || !m_liveReload.Enabled || m_liveReloadCancellation == null)
+            {
+                return;
+            }
+
+            if (m_liveReloadCheckInProgress)
+            {
+                m_liveReloadCheckQueued = true;
+                return;
+            }
+
+            m_liveReloadCheckInProgress = true;
+            _ = CheckLiveReloadAsync(m_liveReloadCancellation.Token);
+        }
+
+        private async Task CheckLiveReloadAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                var fingerprint = await WaitForStableLiveReloadFingerprintAsync(cancellationToken);
+                if (m_liveReloadFingerprint == null)
+                {
+                    m_liveReloadFingerprint = fingerprint;
+                    return;
+                }
+
+                if (string.Equals(m_liveReloadFingerprint, fingerprint, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                var snapshot = await m_liveReload.ReloadAsync(cancellationToken);
+                if (snapshot == null)
+                {
+                    throw new InvalidOperationException("LiveReload.ReloadAsync returned no snapshot.");
+                }
+
+                var afterReloadFingerprint = await WaitForStableLiveReloadFingerprintAsync(cancellationToken);
+                if (!string.Equals(fingerprint, afterReloadFingerprint, StringComparison.Ordinal))
+                {
+                    m_liveReloadCheckQueued = true;
+                    return;
+                }
+
+                if (await ApplyLiveReloadSnapshotAsync(snapshot, cancellationToken))
+                {
+                    m_liveReloadFingerprint = afterReloadFingerprint;
+                    try
+                    {
+                        LiveReloaded?.Invoke(this, EventArgs.Empty);
+                    }
+                    catch (Exception exception)
+                    {
+                        Debug.WriteLine($"ReportViewer.LiveReloaded: {exception.GetType().Name} - {exception.Message}");
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+            }
+            catch (Exception exception)
+            {
+                RaiseLiveReloadError(exception);
+            }
+            finally
+            {
+                m_liveReloadCheckInProgress = false;
+                if (m_liveReloadCheckQueued)
+                {
+                    m_liveReloadCheckQueued = false;
+                    QueueLiveReloadCheck();
+                }
+            }
+        }
+
+        private async Task<string> WaitForStableLiveReloadFingerprintAsync(CancellationToken cancellationToken)
+        {
+            var fingerprint = await ComputeLiveReloadFingerprintAsync(cancellationToken);
+            for (var attempt = 0; attempt < m_liveReload.MaxStableReadAttempts; attempt++)
+            {
+                if (m_liveReload.StabilityDelay > TimeSpan.Zero)
+                {
+                    await Task.Delay(m_liveReload.StabilityDelay, cancellationToken);
+                }
+
+                var nextFingerprint = await ComputeLiveReloadFingerprintAsync(cancellationToken);
+                if (string.Equals(fingerprint, nextFingerprint, StringComparison.Ordinal))
+                {
+                    return fingerprint;
+                }
+
+                fingerprint = nextFingerprint;
+            }
+
+            throw new IOException("Report files are still changing; live reload will retry.");
+        }
+
+        private Task<string> ComputeLiveReloadFingerprintAsync(CancellationToken cancellationToken)
+        {
+            var reportPath = m_liveReload.ReportDefinitionPath;
+            if (string.IsNullOrWhiteSpace(reportPath))
+            {
+                reportPath = LocalReport.ReportPath;
+            }
+
+            return ReportFileFingerprint.ComputeAsync(
+                reportPath,
+                m_liveReload.DataFilePaths ?? Array.Empty<string>(),
+                cancellationToken,
+                m_liveReload.MaxStableReadAttempts).AsTask();
+        }
+
+        private async Task<bool> ApplyLiveReloadSnapshotAsync(
+            ReportViewerReloadSnapshot snapshot,
+            CancellationToken cancellationToken)
+        {
+            if (ProcessingMode != ProcessingMode.Local)
+            {
+                throw new InvalidOperationException("Live reload is supported only for LocalReport.");
+            }
+
+            if (snapshot.ReportDefinition == null || snapshot.ReportDefinition.Length == 0)
+            {
+                throw new ArgumentException("The live reload report definition is empty.", nameof(snapshot));
+            }
+
+            if (snapshot.DataSources == null)
+            {
+                throw new ArgumentException("The live reload data sources are missing.", nameof(snapshot));
+            }
+
+            if (!CancelAllRenderingRequests())
+            {
+                throw new InvalidOperationException("The current report rendering operation did not finish before live reload.");
+            }
+
+            var candidate = new LocalReport();
+            var candidateInfo = new ReportInfo(candidate, new ServerReport());
+            ReportInfo previousInfo = null;
+            try
+            {
+                using (var definition = new MemoryStream(snapshot.ReportDefinition, writable: false))
+                {
+                    candidate.LoadReportDefinition(definition);
+                }
+
+                foreach (var dataSource in snapshot.DataSources)
+                {
+                    if (dataSource == null)
+                    {
+                        throw new ArgumentException("The live reload data source collection contains null.", nameof(snapshot));
+                    }
+
+                    candidate.DataSources.Add(dataSource);
+                }
+
+                if (snapshot.Parameters != null && snapshot.Parameters.Count > 0)
+                {
+                    candidate.SetParameters(snapshot.Parameters);
+                }
+
+                previousInfo = m_reportHierarchy.ReplaceTop(candidateInfo);
+                var completion = new TaskCompletionSource<RenderingCompleteEventArgs>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+                RenderingCompleteEventHandler onRenderingComplete = (sender, args) =>
+                    completion.TrySetResult(args);
+                ReportErrorEventHandler onReportError = (sender, args) =>
+                    completion.TrySetResult(new RenderingCompleteEventArgs(null, args.Exception));
+                RenderingComplete += onRenderingComplete;
+                ReportError += onReportError;
+
+                try
+                {
+                    RefreshReport();
+                    var result = await completion.Task.WaitAsync(cancellationToken);
+                    if (result.Exception != null)
+                    {
+                        throw result.Exception;
+                    }
+
+                    previousInfo.Dispose();
+                    previousInfo = null;
+                    return true;
+                }
+                finally
+                {
+                    RenderingComplete -= onRenderingComplete;
+                    ReportError -= onReportError;
+                }
+            }
+            catch
+            {
+                if (previousInfo != null)
+                {
+                    if (ReferenceEquals(m_reportHierarchy.Peek(), candidateInfo))
+                    {
+                        m_reportHierarchy.ReplaceTop(previousInfo);
+                    }
+
+                    candidateInfo.Dispose();
+                    try
+                    {
+                        RefreshReport();
+                    }
+                    catch (Exception restoreException)
+                    {
+                        Debug.WriteLine($"ReportViewer live reload restore: {restoreException.GetType().Name} - {restoreException.Message}");
+                    }
+                }
+                else
+                {
+                    candidateInfo.Dispose();
+                }
+
+                throw;
+            }
+        }
+
+        private void RaiseLiveReloadError(Exception exception)
+        {
+            try
+            {
+                LiveReloadError?.Invoke(this, new ReportViewerLiveReloadErrorEventArgs(exception));
+            }
+            catch (Exception eventException)
+            {
+                Debug.WriteLine($"ReportViewer.LiveReloadError: {eventException.GetType().Name} - {eventException.Message}");
+            }
+        }
+
+        private void StopLiveReload()
+        {
+            m_liveReloadCancellation?.Cancel();
+            m_liveReloadCancellation?.Dispose();
+            m_liveReloadCancellation = null;
+            m_liveReloadFingerprint = null;
+            m_liveReloadCheckQueued = false;
+            m_liveReloadCheckInProgress = false;
+
+            if (m_liveReloadPollTimer != null)
+            {
+                m_liveReloadPollTimer.Stop();
+                m_liveReloadPollTimer.Tick -= OnLiveReloadPollTick;
+                m_liveReloadPollTimer.Dispose();
+                m_liveReloadPollTimer = null;
+            }
+
+            if (m_liveReloadDebounceTimer != null)
+            {
+                m_liveReloadDebounceTimer.Stop();
+                m_liveReloadDebounceTimer.Tick -= OnLiveReloadDebounceTick;
+                m_liveReloadDebounceTimer.Dispose();
+                m_liveReloadDebounceTimer = null;
+            }
+
+            foreach (var watcher in m_liveReloadWatchers)
+            {
+                watcher.EnableRaisingEvents = false;
+                watcher.Changed -= OnLiveReloadFileEvent;
+                watcher.Created -= OnLiveReloadFileEvent;
+                watcher.Deleted -= OnLiveReloadFileEvent;
+                watcher.Renamed -= OnLiveReloadFileRenamed;
+                watcher.Dispose();
+            }
+
+            m_liveReloadWatchers.Clear();
+        }
+
+        private static int ToTimerInterval(TimeSpan interval)
+        {
+            var milliseconds = interval.TotalMilliseconds;
+            return (int)Math.Clamp(milliseconds, 1, int.MaxValue);
+        }
+
         protected override void Dispose(bool disposing)
         {
             m_disposing = true;
+            StopLiveReload();
             ClearPendingPrint();
             if (!CancelAllRenderingRequests())
             {
@@ -3474,6 +3954,7 @@ namespace Microsoft.Reporting.WinForms
                 m_autoRefreshTimer.Stop();
                 m_autoRefreshTimer.Tick -= OnRefresh;
                 m_autoRefreshTimer.Dispose();
+                m_liveReload.Changed -= OnLiveReloadOptionsChanged;
 
                 if (m_asyncWaitControlTimer != null)
                 {
@@ -3543,6 +4024,7 @@ namespace Microsoft.Reporting.WinForms
                 LoadPreferencesAtStartup();
             }
             base.OnLoad(e);
+            ConfigureLiveReload();
         }
 
         private void LoadPreferencesAtStartup()

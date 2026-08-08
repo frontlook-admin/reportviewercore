@@ -1,12 +1,17 @@
 using FrontLookCoreDbAccessLibrary.Desktop.Rdlc.FL_RDLC;
 using FrontLookCoreLibraryAssembly.FL_General;
+using FrontLookCoreLibraryAssembly.FL_GlobalClasses;
 using Microsoft.Reporting.WinForms;
 using Microsoft.ReportViewer.WinForms.FrontLookCode;
 using System;
+using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.Drawing.Printing;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace CliReportCompiler.ReportForm
@@ -14,6 +19,7 @@ namespace CliReportCompiler.ReportForm
     public class FL_RdlcReportViewerForm : Form
     {
         private readonly ReportViewer reportViewer;
+        private readonly string[] liveReloadDataFilePaths = Array.Empty<string>();
         private bool reportLoaded;
 
         public FL_IRdlcReport reportCompiler { get; set; } = new();
@@ -36,6 +42,19 @@ namespace CliReportCompiler.ReportForm
             this.reportCompiler = reportCompiler ?? throw new ArgumentNullException(nameof(reportCompiler));
         }
 
+        public FL_RdlcReportViewerForm(
+            FL_IRdlcReport reportCompiler,
+            params string[] dataFilePaths)
+            : this(reportCompiler)
+        {
+            liveReloadDataFilePaths = dataFilePaths?
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(Path.GetFullPath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+                ?? Array.Empty<string>();
+        }
+
         protected override void OnLoad(EventArgs e)
         {
             base.OnLoad(e);
@@ -52,6 +71,8 @@ namespace CliReportCompiler.ReportForm
             // first render use the final custom settings and prevents the
             // setup dialog from cancelling a render that is still in flight.
             reportViewer.SetDisplayMode(DisplayMode.PrintLayout);
+
+            ConfigureLiveReload();
 
             if (reportCompiler.TriggerPrint)
             {
@@ -116,6 +137,139 @@ namespace CliReportCompiler.ReportForm
             reportViewer.PrintSettingFilePath = reportCompiler.PrintSettingFilePath;
             reportViewer.CustomPrintDialog = reportCompiler.PrintSettings;
             reportLoaded = true;
+        }
+
+        private void ConfigureLiveReload()
+        {
+            if (!reportLoaded || string.IsNullOrWhiteSpace(reportCompiler.ReportFile))
+            {
+                return;
+            }
+
+            reportViewer.LiveReloadError += OnLiveReloadError;
+            reportViewer.LiveReload.ReportDefinitionPath = reportCompiler.ReportFile;
+            reportViewer.LiveReload.DataFilePaths = liveReloadDataFilePaths;
+            reportViewer.LiveReload.ReloadAsync = ReloadReportAsync;
+            reportViewer.LiveReload.Enabled = true;
+        }
+
+        private void OnLiveReloadError(object sender, ReportViewerLiveReloadErrorEventArgs e)
+        {
+            Debug.WriteLine($"RDLC live reload failed: {e.Exception.GetType().Name} - {e.Exception.Message}");
+        }
+
+        private async ValueTask<ReportViewerReloadSnapshot> ReloadReportAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var reportDefinition = await File.ReadAllBytesAsync(
+                reportCompiler.ReportFile,
+                cancellationToken);
+            var dataSet = await LoadReloadDataSetAsync(cancellationToken);
+            var dataSources = dataSet.Tables
+                .Cast<DataTable>()
+                .Select(table => new ReportDataSource(table.TableName, table))
+                .ToList();
+            var parameters = GetReportParameters(reportDefinition, dataSet);
+
+            return new ReportViewerReloadSnapshot(reportDefinition, dataSources, parameters);
+        }
+
+        private async ValueTask<DataSet> LoadReloadDataSetAsync(CancellationToken cancellationToken)
+        {
+            var dataFilePath = liveReloadDataFilePaths.FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(dataFilePath))
+            {
+                return reportCompiler.DataTables
+                    ?? throw new InvalidOperationException("No data to load");
+            }
+
+            var xml = await File.ReadAllTextAsync(dataFilePath, cancellationToken);
+            var dataSet = xml.FL_CastXmlToDataSet();
+            if (dataSet.Tables.Count == 0)
+            {
+                throw new InvalidDataException("No data tables found in the data source");
+            }
+
+            return dataSet;
+        }
+
+        private IReadOnlyList<ReportParameter> GetReportParameters(
+            byte[] reportDefinition,
+            DataSet dataSet)
+        {
+            using var report = new LocalReport();
+            using var definition = new MemoryStream(reportDefinition, writable: false);
+            report.LoadReportDefinition(definition);
+
+            var suppliedParameters = GetSuppliedParameters(dataSet);
+            var requiredParameters = report.GetParameters().ToList();
+            if (requiredParameters.Count == 0)
+            {
+                return Array.Empty<ReportParameter>();
+            }
+
+            if (suppliedParameters.Count == 0)
+            {
+                throw new InvalidDataException("No parameters to load");
+            }
+
+            var missingParameters = requiredParameters
+                .Where(parameter => !suppliedParameters.ContainsKey(parameter.Name))
+                .Select(parameter => parameter.Name)
+                .ToArray();
+            if (missingParameters.Length > 0)
+            {
+                throw new InvalidDataException(
+                    $"Missing parameters: {string.Join(",", missingParameters)}");
+            }
+
+            return requiredParameters
+                .Select(parameter =>
+                {
+                    var suppliedParameter = suppliedParameters[parameter.Name];
+                    return new ReportParameter(
+                        parameter.Name,
+                        suppliedParameter?.Value?.ToString() ?? string.Empty);
+                })
+                .ToList();
+        }
+
+        private Dictionary<string, FL_RdlcReportParameter> GetSuppliedParameters(DataSet dataSet)
+        {
+            var suppliedParameters = new Dictionary<string, FL_RdlcReportParameter>(
+                StringComparer.OrdinalIgnoreCase);
+
+            foreach (var parameter in reportCompiler.ReportParameters ?? [])
+            {
+                if (!string.IsNullOrWhiteSpace(parameter.Name))
+                {
+                    suppliedParameters[parameter.Name] = parameter;
+                }
+            }
+
+            if (dataSet.Tables.Contains("RldcParameters"))
+            {
+                var parameterTable = dataSet.Tables["RldcParameters"];
+                if (parameterTable.Columns.Contains("Name") &&
+                    parameterTable.Columns.Contains("Value"))
+                {
+                    foreach (DataRow row in parameterTable.Rows)
+                    {
+                        var name = row["Name"]?.ToString();
+                        if (!string.IsNullOrWhiteSpace(name))
+                        {
+                            suppliedParameters[name] = new FL_RdlcReportParameter
+                            {
+                                Name = name,
+                                Value = row["Value"]
+                            };
+                        }
+                    }
+                }
+            }
+
+            return suppliedParameters;
         }
 
         private bool LoadSubreports()
