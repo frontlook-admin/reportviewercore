@@ -71,6 +71,46 @@ public sealed class RdlcPaginationAndPrintRegressionTests
     }
 
     [Fact]
+    public void DirectPrintAndViewerHosts_PreserveNormalPreviewMode()
+    {
+        var reportViewerSource = File.ReadAllText(FindRepositoryFile(
+            "reportviewercore",
+            "Microsoft.ReportViewer.WinForms",
+            "Microsoft.Reporting.WinForms",
+            "ReportViewer.cs"));
+        var cliViewerSource = File.ReadAllText(FindRepositoryFile(
+            "reportviewercore",
+            "RdlcCliReportCompiler",
+            "ReportForm",
+            "FL_RdlcReportViewerForm.cs"));
+        var embeddedViewerSource = File.ReadAllText(FindRepositoryFile(
+            "FrontLookCore",
+            "FrontLookCoreDbAccessLibrary",
+            "FrontLookCoreDbAccessLibrary.Desktop.Rdlc",
+            "FL_RDLC",
+            "FL_IRdlcReport.cs"));
+        var sampleViewerSource = File.ReadAllText(FindRepositoryFile(
+            "ReportPreviewer",
+            "Form1.cs"));
+        var reportPanelSource = File.ReadAllText(FindRepositoryFile(
+            "reportviewercore",
+            "Microsoft.ReportViewer.WinForms",
+            "Microsoft.Reporting.WinForms",
+            "ReportPanel.cs"));
+
+        var directPrintStart = reportViewerSource.IndexOf("public void DPrint()", StringComparison.Ordinal);
+        var directPrintEnd = reportViewerSource.IndexOf("private bool RenderPrintPages", directPrintStart, StringComparison.Ordinal);
+        directPrintStart.Should().BeGreaterThanOrEqualTo(0);
+        directPrintEnd.Should().BeGreaterThan(directPrintStart);
+        reportViewerSource[directPrintStart..directPrintEnd].Should().NotContain("winRSviewer.SetNewPage(null);");
+        cliViewerSource.Should().NotContain("reportViewer.SetDisplayMode(DisplayMode.PrintLayout);");
+        embeddedViewerSource.Should().NotContain("reportViewer.SetDisplayMode(DisplayMode.PrintLayout);");
+        sampleViewerSource.Should().NotContain("reportViewer1.SetDisplayMode(DisplayMode.PrintLayout);");
+        reportPanelSource.Should().Contain("m_host.TrySelectRowAtPoint(e.Location);");
+        reportPanelSource.Should().Contain("Global.ToMillimeters(point.X / zoomRate, graphics.DpiX)");
+    }
+
+    [Fact]
     public void TwoPageTablix_FixtureHasStablePageAndTablixShape()
     {
         var fixturePath = FixturePath;
@@ -311,6 +351,23 @@ public sealed class RdlcPaginationAndPrintRegressionTests
         Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!,
         "Fixtures",
         "TwoPageTablix.rdlc");
+
+    private static string FindRepositoryFile(params string[] relativePath)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null)
+        {
+            var candidate = relativePath.Aggregate(directory.FullName, Path.Combine);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new FileNotFoundException($"Could not locate repository file: {Path.Combine(relativePath)}");
+    }
 
     private static object GetCurrentFileManager(Microsoft.Reporting.WinForms.ReportViewer viewer)
     {

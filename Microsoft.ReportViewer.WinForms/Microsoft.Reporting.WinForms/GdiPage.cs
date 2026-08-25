@@ -148,6 +148,21 @@ namespace Microsoft.Reporting.WinForms
 			return true;
 		}
 
+		internal bool SelectRowAtPoint(PointF point)
+		{
+			IReadOnlyList<TablixRowTarget> targets = m_gdiRenderer.Report.TablixRowTargets;
+			for (int i = 0; i < targets.Count; i++)
+			{
+				if (targets[i].Bounds.Contains(point))
+				{
+					m_selectedRowTargetIndex = i;
+					return true;
+				}
+			}
+
+			return false;
+		}
+
 		internal void ResetSelectedRow()
 		{
 			m_selectedRowTargetIndex = -1;

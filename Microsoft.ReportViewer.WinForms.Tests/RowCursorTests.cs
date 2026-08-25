@@ -41,4 +41,26 @@ public sealed class RowCursorTests
 
         selected.GetValue(page).Should().Be(-1);
     }
+
+    [Fact]
+    public void GdiPage_SelectRowAtPoint_ChangesSelectionToClickedRow()
+    {
+        var assembly = typeof(ReportViewerControl).Assembly;
+        var rendererType = assembly.GetType("Microsoft.Reporting.WinForms.ClientGDIRenderer")!;
+        var pageType = assembly.GetType("Microsoft.Reporting.WinForms.GdiPage")!;
+        var reportType = assembly.GetType("Microsoft.Reporting.WinForms.RenderingReport")!;
+        var renderer = System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(rendererType);
+        var report = System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(reportType);
+        var addTarget = reportType.GetMethod("AddTablixRowTarget", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        addTarget.Invoke(report, [new System.Drawing.RectangleF(10, 10, 100, 8), false, 0, "row", 0]);
+        addTarget.Invoke(report, [new System.Drawing.RectangleF(10, 20, 100, 8), false, 1, "row", 1]);
+        rendererType.GetField("m_report", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(renderer, report);
+        var page = Activator.CreateInstance(pageType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, [renderer], null)!;
+        var select = pageType.GetMethod("SelectRowAtPoint", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var selected = pageType.GetProperty("SelectedRowTargetIndex", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        select.Invoke(page, [new System.Drawing.PointF(20, 24)]).Should().Be(true);
+
+        selected.GetValue(page).Should().Be(1);
+    }
 }

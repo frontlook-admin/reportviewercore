@@ -706,6 +706,7 @@ namespace Microsoft.Reporting.WinForms
 				{
 					if (!InLongRunningAction && CurrentPage != null && e.Button == MouseButtons.Left)
 					{
+						m_host.TrySelectRowAtPoint(e.Location);
 						bool shiftKeyDown = (Control.ModifierKeys & Keys.Shift) > Keys.None;
 						Action actionAtPoint = GetActionAtPoint(CurrentPage.Actions, e.X, e.Y);
 						if (actionAtPoint != null)
@@ -1583,6 +1584,28 @@ namespace Microsoft.Reporting.WinForms
 		private bool TryMoveSelectedRow(bool reverse)
 		{
 			if (!EnableRowCursor || !(m_currentPage is GdiPage gdiPage) || !gdiPage.MoveSelectedRow(reverse))
+			{
+				return false;
+			}
+
+			SetFocusPointMm(gdiPage.SelectedRowFocusPoint, WinRSviewer.FocusMode.AvoidScrolling);
+			Invalidate(invalidateChildren: true);
+			return true;
+		}
+
+		private bool TrySelectRowAtPoint(Point point)
+		{
+			if (!EnableRowCursor || !(m_currentPage is GdiPage gdiPage))
+			{
+				return false;
+			}
+
+			using Graphics graphics = CreateGraphics();
+			float zoomRate = GetZoomRate();
+			PointF pagePoint = new PointF(
+				Global.ToMillimeters(point.X / zoomRate, graphics.DpiX),
+				Global.ToMillimeters(point.Y / zoomRate, graphics.DpiY));
+			if (!gdiPage.SelectRowAtPoint(pagePoint))
 			{
 				return false;
 			}

@@ -2991,8 +2991,9 @@ namespace Microsoft.Reporting.WinForms
                     ClearPendingPrint();
                 }
 
-                // Clear the cached print-only pages.
-                winRSviewer.SetNewPage(null);
+                // Print-only pages live in FileManager. Do not replace the
+                // visible page here: in Normal mode it is the GdiPage preview,
+                // and clearing it makes the report disappear until Refresh.
             }
         }
 

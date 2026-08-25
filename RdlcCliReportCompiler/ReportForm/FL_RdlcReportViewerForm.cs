@@ -67,10 +67,9 @@ namespace CliReportCompiler.ReportForm
                 ShowPrintSetup();
             }
 
-            // Select PrintLayout only after setup is complete. This makes the
-            // first render use the final custom settings and prevents the
-            // setup dialog from cancelling a render that is still in flight.
-            reportViewer.SetDisplayMode(DisplayMode.PrintLayout);
+            // Start in Normal mode. PrintLayout is an explicit toolbar action;
+            // loading persisted printer settings must not change the preview.
+            reportViewer.RefreshReport();
 
             ConfigureLiveReload();
 
@@ -86,7 +85,7 @@ namespace CliReportCompiler.ReportForm
         {
             LoadReport();
             ApplyStoredPrintSettings();
-            reportViewer.SetDisplayMode(DisplayMode.PrintLayout);
+            reportViewer.RefreshReport();
             reportViewer.DPrint();
         }
 
