@@ -93,6 +93,12 @@ namespace Microsoft.Reporting.WinForms
 			}
 		}
 
+		public bool EnableRowCursor
+		{
+			get => m_reportPanel.EnableRowCursor;
+			set => m_reportPanel.EnableRowCursor = value;
+		}
+
 		public float ZoomCalculated => m_reportPanel.GetZoomRate();
 
 		public event InternalPageNavigationEventHandler PageNavigation
@@ -324,6 +330,11 @@ namespace Microsoft.Reporting.WinForms
 		public void SetZoom()
 		{
 			m_reportPanel.SetZoom();
+		}
+
+		public void ResetRowCursor()
+		{
+			m_reportPanel.ResetRowCursor();
 		}
 
 		public void SetNewPage(DrawablePage currentPage)

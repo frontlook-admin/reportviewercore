@@ -195,6 +195,10 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
             PrintRange = PrinterSettings.PrintRange;
             Copies = PrinterSettings.Copies;
             Collate = PrinterSettings.Collate;
+            FromPage = PrinterSettings.FromPage;
+            ToPage = PrinterSettings.ToPage;
+            MinimumPage = PrinterSettings.MinimumPage;
+            MaximumPage = PrinterSettings.MaximumPage;
             PrintType = printType;
             if (printType == PrintType.Default)
             {
@@ -227,6 +231,10 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
             PrintRange = printDialog.PrinterSettings.PrintRange;
             Copies = printDialog.PrinterSettings.Copies;
             Collate = printDialog.PrinterSettings.Collate;
+            FromPage = printDialog.PrinterSettings.FromPage;
+            ToPage = printDialog.PrinterSettings.ToPage;
+            MinimumPage = printDialog.PrinterSettings.MinimumPage;
+            MaximumPage = printDialog.PrinterSettings.MaximumPage;
             PrintType = printType;
             if (printType == PrintType.Default)
             {
@@ -258,6 +266,10 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
             PrintRange = printDialog.PrinterSettings.PrintRange;
             Copies = printDialog.PrinterSettings.Copies;
             Collate = printDialog.PrinterSettings.Collate;
+            FromPage = printDialog.PrinterSettings.FromPage;
+            ToPage = printDialog.PrinterSettings.ToPage;
+            MinimumPage = printDialog.PrinterSettings.MinimumPage;
+            MaximumPage = printDialog.PrinterSettings.MaximumPage;
             PrintType = printType;
             if (printType == PrintType.Mod)
             {
@@ -287,6 +299,10 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
             PrintRange = printDialog.PrintRange;
             Copies = printDialog.Copies;
             Collate = printDialog.Collate;
+            FromPage = printDialog.FromPage;
+            ToPage = printDialog.ToPage;
+            MinimumPage = printDialog.MinimumPage;
+            MaximumPage = printDialog.MaximumPage;
             PaperSize = printDialog.PaperSize;
             Landscape = printDialog.Landscape;
             PrintType = printDialog.PrintType;
@@ -308,6 +324,10 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
         public virtual PrintRange PrintRange { get; set; }
         public virtual short Copies { get; set; }
         public virtual bool Collate { get; set; }
+        public virtual int FromPage { get; set; }
+        public virtual int ToPage { get; set; }
+        public virtual int MinimumPage { get; set; }
+        public virtual int MaximumPage { get; set; }
         public virtual PaperSize PaperSize { get; set; }
         public virtual bool Landscape { get; set; }
         public virtual PrintType PrintType { get; set; }
@@ -363,6 +383,10 @@ namespace Microsoft.ReportViewer.WinForms.FrontLookCode
                 PrintRange = PrintRange,
                 Copies = Copies,
                 Collate = Collate,
+                FromPage = FromPage,
+                ToPage = ToPage,
+                MinimumPage = MinimumPage,
+                MaximumPage = MaximumPage,
                 PaperSize = PaperSize,
                 Landscape = Landscape,
                 CPageSettings = CPageSettings,

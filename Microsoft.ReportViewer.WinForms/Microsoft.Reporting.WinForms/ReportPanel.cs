@@ -814,6 +814,9 @@ namespace Microsoft.Reporting.WinForms
 		}
 
 		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+		public bool EnableRowCursor { get; set; } = true;
+
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
 		public DrawablePage CurrentPage
 		{
 			get
@@ -835,6 +838,7 @@ namespace Microsoft.Reporting.WinForms
 					}
 				}
 				m_previousPageWidth = GetCurrentPageWidth();
+				ResetRowCursor();
 				m_currentPage = value;
 				if (m_currentPage is GdiPage gdiPage)
 				{
@@ -1508,6 +1512,10 @@ namespace Microsoft.Reporting.WinForms
 					{
 						MoveToNextAction(reverse: true);
 					}
+					else if (TryMoveSelectedRow(reverse: true))
+					{
+						break;
+					}
 					else
 					{
 						ScrollReportView(isVerticalScroll: true, scrollByViewSize: false, isPositiveMovement: false);
@@ -1517,6 +1525,10 @@ namespace Microsoft.Reporting.WinForms
 					if (e.Control)
 					{
 						MoveToNextAction(reverse: false);
+					}
+					else if (TryMoveSelectedRow(reverse: false))
+					{
+						break;
 					}
 					else
 					{
@@ -1558,6 +1570,26 @@ namespace Microsoft.Reporting.WinForms
 			{
 				ViewerControl.UpdateUIState(e2);
 			}
+		}
+
+		internal void ResetRowCursor()
+		{
+			if (m_currentPage is GdiPage gdiPage)
+			{
+				gdiPage.ResetSelectedRow();
+			}
+		}
+
+		private bool TryMoveSelectedRow(bool reverse)
+		{
+			if (!EnableRowCursor || !(m_currentPage is GdiPage gdiPage) || !gdiPage.MoveSelectedRow(reverse))
+			{
+				return false;
+			}
+
+			SetFocusPointMm(gdiPage.SelectedRowFocusPoint, WinRSviewer.FocusMode.AvoidScrolling);
+			Invalidate(invalidateChildren: true);
+			return true;
 		}
 
 		private void OnPageNavigation(int newPage, ActionType postRenderAction)

@@ -82,6 +82,8 @@ namespace Microsoft.Reporting.WinForms
 			}
 			int num3 = 0;
 			int num4 = -1;
+			int sourceOrder = context.RenderingReport.AllocateTablixRowTargetSourceOrder();
+			string source = rPLTablix.ElementProps?.UniqueName ?? string.Empty;
 			RPLTablixRow nextRow;
 			while ((nextRow = rPLTablix.GetNextRow()) != null)
 			{
@@ -89,6 +91,17 @@ namespace Microsoft.Reporting.WinForms
 				{
 					continue;
 				}
+				if (rPLTablix.RowHeights == null || num3 < 0 || num3 >= rPLTablix.RowHeights.Length || nextRow.NumCells == 0 || !IsValidRowHeight(rPLTablix.RowHeights[num3]))
+				{
+					num3++;
+					continue;
+				}
+				context.RenderingReport.AddTablixRowTarget(
+					new RectangleF(bounds.X, bounds.Top + num, GetTablixWidth(rPLTablix), rPLTablix.RowHeights[num3]),
+					num3 < rPLTablix.ColumnHeaderRows,
+					num3,
+					source,
+					sourceOrder);
 				SharedRenderer.CalculateColumnZIndexes(rPLTablix, nextRow, num3, array2);
 				if (nextRow.OmittedHeaders != null)
 				{
@@ -205,6 +218,29 @@ namespace Microsoft.Reporting.WinForms
 				position.Width = array[array.Length - 1] + rPLTablix.ColumnWidths[rPLTablix.ColumnWidths.Length - 1];
 			}
 			position.Height = num;
+		}
+
+		private static bool IsValidRowHeight(float height)
+		{
+			return !float.IsNaN(height) && !float.IsInfinity(height) && height > 0f;
+		}
+
+		private static float GetTablixWidth(RPLTablix tablix)
+		{
+			if (tablix.ColumnWidths == null || tablix.ColumnWidths.Length == 0)
+			{
+				return 0f;
+			}
+			float width = 0f;
+			for (int i = 0; i < tablix.ColumnWidths.Length; i++)
+			{
+				if (float.IsNaN(tablix.ColumnWidths[i]) || float.IsInfinity(tablix.ColumnWidths[i]) || tablix.ColumnWidths[i] < 0f)
+				{
+					return 0f;
+				}
+				width += tablix.ColumnWidths[i];
+			}
+			return width;
 		}
 
 		internal override void DrawContent(GdiContext context)

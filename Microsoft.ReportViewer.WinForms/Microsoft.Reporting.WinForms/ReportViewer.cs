@@ -185,6 +185,14 @@ namespace Microsoft.Reporting.WinForms
         [SRDescription("ServerReportDesc")]
         public ServerReport ServerReport => CurrentReport.ServerReport;
 
+        [DefaultValue(true)]
+        [SRDescription("EnableRowCursorDesc")]
+        public bool EnableRowCursor
+        {
+            get => winRSviewer.EnableRowCursor;
+            set => winRSviewer.EnableRowCursor = value;
+        }
+
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Content)]
         [SRDescription("LocalReportDesc")]
         public LocalReport LocalReport => CurrentReport.LocalReport;
@@ -1880,11 +1888,10 @@ namespace Microsoft.Reporting.WinForms
         {
             if (m_viewMode == DisplayMode.PrintLayout)
             {
+                // Print-layout pages are materialized physical pages. The report
+                // engine's count may still be an estimate, so the FileManager is
+                // the authoritative count once a page stream has been created.
                 pageCountMode = PageCountMode.Actual;
-                if (CurrentReport.FileManager.Status == FileManagerStatus.InProgress)
-                {
-                    return Math.Max(CurrentReport.FileManager.Count - 1, 0);
-                }
                 return CurrentReport.FileManager.Count;
             }
             return Report.GetTotalPages(out pageCountMode);
@@ -1910,6 +1917,7 @@ namespace Microsoft.Reporting.WinForms
 
         private void SetViewForCurrentPage(UIState state, PostRenderArgs args)
         {
+            winRSviewer.ResetRowCursor();
             if (m_viewMode == DisplayMode.PrintLayout)
             {
                 winRSviewer.SetNewPage(new MetaFilePage(CurrentReport.FileManager.Get(CurrentPage), PageSettings));
@@ -2975,10 +2983,7 @@ namespace Microsoft.Reporting.WinForms
             if (OnPrintingBegin(this, printerSettings))
             {
                 var pageSettings = printSettings.CPageSettings?.GetPageSettings() ?? GetPageSettings();
-                if (printSettings.CPageSettings != null)
-                {
-                    SetPageSettings(pageSettings);
-                }
+                // Do not call SetPageSettings here: in PrintLayout it starts an asynchronous preview render that can append pages after print rendering begins.
 
                 QueuePrintAfterRender(printerSettings, pageSettings);
                 if (!RenderPrintPages(printSettings.CPageSettings, printerSettings))

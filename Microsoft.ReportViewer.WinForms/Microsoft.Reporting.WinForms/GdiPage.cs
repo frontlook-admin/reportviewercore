@@ -56,6 +56,8 @@ namespace Microsoft.Reporting.WinForms
 
 		private int m_actionIndex = -1;
 
+		private int m_selectedRowTargetIndex = -1;
+
 		private bool m_firstDraw = true;
 
 		public override ReportActions Actions => m_actions;
@@ -113,6 +115,54 @@ namespace Microsoft.Reporting.WinForms
 			m_gdiRenderer = renderer;
 		}
 
+		internal int SelectedRowTargetIndex => m_selectedRowTargetIndex;
+
+		internal PointF SelectedRowFocusPoint
+		{
+			get
+			{
+				TablixRowTarget target = GetSelectedRowTarget();
+				return target == null
+					? PointF.Empty
+					: new PointF(target.Bounds.Left + target.Bounds.Width / 2f, target.Bounds.Top + target.Bounds.Height / 2f);
+			}
+		}
+
+		internal bool MoveSelectedRow(bool reverse)
+		{
+			IReadOnlyList<TablixRowTarget> targets = m_gdiRenderer.Report.TablixRowTargets;
+			if (targets.Count == 0)
+			{
+				return false;
+			}
+
+			if (m_selectedRowTargetIndex < 0)
+			{
+				m_selectedRowTargetIndex = reverse ? targets.Count - 1 : 0;
+			}
+			else
+			{
+				m_selectedRowTargetIndex = Math.Clamp(m_selectedRowTargetIndex + (reverse ? -1 : 1), 0, targets.Count - 1);
+			}
+
+			return true;
+		}
+
+		internal void ResetSelectedRow()
+		{
+			m_selectedRowTargetIndex = -1;
+		}
+
+		private TablixRowTarget GetSelectedRowTarget()
+		{
+			if (m_gdiRenderer == null || m_selectedRowTargetIndex < 0)
+			{
+				return null;
+			}
+			IReadOnlyList<TablixRowTarget> targets = m_gdiRenderer.Report.TablixRowTargets;
+			return m_selectedRowTargetIndex < targets.Count ? targets[m_selectedRowTargetIndex] : null;
+		}
+
 		internal void ApplyTheme(ReportViewerTheme theme)
 		{
 			m_gdiRenderer.Theme = theme;
@@ -141,6 +191,7 @@ namespace Microsoft.Reporting.WinForms
 			{
 				RenderVisibleActionItem(g);
 			}
+			RenderSelectedRow(g);
 			RenderFixedHeaders(g, scrollOffset);
 		}
 
@@ -187,6 +238,21 @@ namespace Microsoft.Reporting.WinForms
 				array[num++] = new PointF(Global.ToMillimeters((int)pointF.X, dpiX), Global.ToMillimeters((int)pointF.Y, dpiY));
 			}
 			g.DrawPolygon(new Pen(new HatchBrush(HatchStyle.Percent50, Color.White, Color.Black)), array);
+		}
+
+		private void RenderSelectedRow(Graphics g)
+		{
+			TablixRowTarget target = GetSelectedRowTarget();
+			if (target == null)
+			{
+				return;
+			}
+
+			Color accent = m_gdiRenderer.Theme.Accent;
+			using SolidBrush fill = new SolidBrush(Color.FromArgb(42, accent));
+			using Pen outline = new Pen(Color.FromArgb(190, accent), 1f);
+			g.FillRectangle(fill, target.Bounds);
+			g.DrawRectangle(outline, target.Bounds.X, target.Bounds.Y, target.Bounds.Width, target.Bounds.Height);
 		}
 
 		private void RenderFixedHeaders(Graphics g, PointF offset)

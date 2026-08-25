@@ -115,7 +115,11 @@ namespace Microsoft.ReportViewer.WinForms.Tests
                 PrinterName = "TestPrinter",
                 Copies = 3,
                 Collate = true,
-                PrintRange = PrintRange.SomePages
+                PrintRange = PrintRange.SomePages,
+                FromPage = 2,
+                ToPage = 8,
+                MinimumPage = 1,
+                MaximumPage = 100
             };
             var pageSettings = new PageSettings();
             var dialog = new CustomPrintDialog(printerSettings, pageSettings);
@@ -131,6 +135,10 @@ namespace Microsoft.ReportViewer.WinForms.Tests
             settings.Copies.Should().Be(3);
             settings.Collate.Should().BeTrue();
             settings.PrintRange.Should().Be(PrintRange.SomePages);
+            settings.FromPage.Should().Be(2);
+            settings.ToPage.Should().Be(8);
+            settings.MinimumPage.Should().Be(1);
+            settings.MaximumPage.Should().Be(100);
             settings.AllowSomePages.Should().BeTrue();
             settings.AllowSelection.Should().BeFalse();
         }
@@ -379,6 +387,40 @@ namespace Microsoft.ReportViewer.WinForms.Tests
             var restored = new CustomPrintDialog(json);
 
             restored.SettingsSchemaVersion.Should().Be(CustomPrintDialog.CurrentSettingsSchemaVersion);
+        }
+
+        [Fact]
+        public void CustomPrintDialog_JsonRoundTrip_PreservesPageRangeSettings()
+        {
+            var original = new CustomPrintDialog
+            {
+                PrintRange = PrintRange.SomePages,
+                FromPage = 2,
+                ToPage = 8,
+                MinimumPage = 1,
+                MaximumPage = 100
+            };
+
+            var restored = new CustomPrintDialog(original.GetJsonData());
+
+            restored.PrintRange.Should().Be(PrintRange.SomePages);
+            restored.FromPage.Should().Be(2);
+            restored.ToPage.Should().Be(8);
+            restored.MinimumPage.Should().Be(1);
+            restored.MaximumPage.Should().Be(100);
+        }
+
+        [Fact]
+        public void CustomPrintDialog_LegacyJsonWithoutPageRangeFieldsRemainsReadable()
+        {
+            var json = "{\"PrinterName\":null,\"PrintRange\":0,\"Copies\":1,\"Collate\":false}";
+
+            var restored = new CustomPrintDialog(json);
+
+            restored.Should().NotBeNull();
+            restored.Copies.Should().Be(1);
+            restored.FromPage.Should().Be(0);
+            restored.ToPage.Should().Be(0);
         }
 
         [Fact]

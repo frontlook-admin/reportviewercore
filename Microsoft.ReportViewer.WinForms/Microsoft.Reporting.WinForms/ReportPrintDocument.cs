@@ -34,9 +34,20 @@ namespace Microsoft.Reporting.WinForms
 			{
 			case PrintRange.AllPages:
 				m_currentPage = 1;
-				m_endPage = base.PrinterSettings.MaximumPage;
+				// MaximumPage is a UI hint and can be zero or stale while the
+				// report is still rendering. The completed FileManager pages are
+				// the authoritative bound for an all-pages print.
+				m_endPage = 0;
 				break;
 			case PrintRange.SomePages:
+				if (base.PrinterSettings.FromPage < 1)
+				{
+					throw new ArgumentOutOfRangeException(nameof(base.PrinterSettings.FromPage), "The first page must be one-based.");
+				}
+				if (base.PrinterSettings.ToPage < base.PrinterSettings.FromPage)
+				{
+					throw new ArgumentOutOfRangeException(nameof(base.PrinterSettings.ToPage), "The last page must not precede the first page.");
+				}
 				m_currentPage = base.PrinterSettings.FromPage;
 				m_endPage = base.PrinterSettings.ToPage;
 				break;
@@ -60,7 +71,9 @@ namespace Microsoft.Reporting.WinForms
 				Rectangle destRect = new Rectangle(e.PageBounds.Left - m_hardMarginX, e.PageBounds.Top - m_hardMarginY, e.PageBounds.Width, e.PageBounds.Height);
 				metaFilePage.Draw(e.Graphics, destRect);
 				m_currentPage++;
-				e.HasMorePages = (m_currentPage <= m_endPage && m_fileManager.Count >= m_currentPage);
+				e.HasMorePages = base.PrinterSettings.PrintRange == PrintRange.AllPages
+					? m_fileManager.Count >= m_currentPage
+					: m_currentPage <= m_endPage && m_fileManager.Count >= m_currentPage;
 			}
 			else
 			{

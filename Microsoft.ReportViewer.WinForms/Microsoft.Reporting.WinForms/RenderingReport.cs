@@ -3,6 +3,7 @@ using Microsoft.ReportingServices.Rendering.RPLProcessing;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 
 namespace Microsoft.Reporting.WinForms
 {
@@ -21,6 +22,10 @@ namespace Microsoft.Reporting.WinForms
 		private List<Action> m_toolTips;
 
 		private List<RenderingReportSection> m_reportSections;
+
+		private List<TablixRowTarget> m_tablixRowTargets;
+
+		private int m_nextTablixRowTargetSourceOrder;
 
 		internal Color BackgroundColor;
 
@@ -99,6 +104,34 @@ namespace Microsoft.Reporting.WinForms
 		}
 
 		internal List<RenderingReportSection> ReportSections => m_reportSections;
+
+		internal IReadOnlyList<TablixRowTarget> TablixRowTargets
+		{
+			get
+			{
+				return (m_tablixRowTargets ?? new List<TablixRowTarget>())
+					.OrderBy(target => target.Bounds.Top)
+					.ThenBy(target => target.Bounds.Left)
+					.ThenBy(target => target.Source, StringComparer.Ordinal)
+					.ThenBy(target => target.SourceOrder)
+					.ThenBy(target => target.RowIndex)
+					.ToArray();
+			}
+		}
+
+		internal int AllocateTablixRowTargetSourceOrder()
+		{
+			return m_nextTablixRowTargetSourceOrder++;
+		}
+
+		internal void AddTablixRowTarget(RectangleF bounds, bool isHeader, int rowIndex, string source, int sourceOrder)
+		{
+			if (m_tablixRowTargets == null)
+			{
+				m_tablixRowTargets = new List<TablixRowTarget>();
+			}
+			m_tablixRowTargets.Add(new TablixRowTarget(bounds, isHeader, rowIndex, source, sourceOrder));
+		}
 
 		internal RenderingReport(GdiContext context)
 		{

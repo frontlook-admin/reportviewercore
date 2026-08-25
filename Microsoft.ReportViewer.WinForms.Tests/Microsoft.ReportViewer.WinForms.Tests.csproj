@@ -39,4 +39,8 @@
 		<ProjectReference Include="..\Microsoft.ReportViewer.WinForms\Microsoft.ReportViewer.WinForms.csproj" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<None Update="Fixtures\TwoPageTablix.rdlc" CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
+
 </Project>
