@@ -97,6 +97,19 @@ public sealed class DesignTimeMetadataTests
             .Visibility.Should().Be(DesignerSerializationVisibility.Hidden);
     }
 
+    [Fact]
+    public void Security_contract_is_owned_by_the_shared_common_assembly()
+    {
+        var localReportType = typeof(ReportViewerControl).GetProperty(nameof(ReportViewerControl.LocalReport))!.PropertyType;
+        var securityPolicyProperty = localReportType.GetProperty("SecurityPolicy")!;
+        var commonAssembly = typeof(Microsoft.Reporting.WinForms.ReportSecurityPolicy).Assembly;
+
+        commonAssembly.GetType("Microsoft.Reporting.WinForms.ReportSecurityPolicy")
+            .Should().NotBeNull();
+        ReferenceEquals(securityPolicyProperty.PropertyType.Assembly, commonAssembly)
+            .Should().BeTrue();
+    }
+
     private static string FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

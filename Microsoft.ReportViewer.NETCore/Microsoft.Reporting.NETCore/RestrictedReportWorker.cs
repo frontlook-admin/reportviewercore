@@ -28,6 +28,7 @@ public sealed class ReportWorkerClientOptions
     public long MaxOutputBytes { get; set; } = 64 * 1024 * 1024;
     public long MemoryLimitBytes { get; set; } = 512 * 1024 * 1024;
     public string? WorkingDirectory { get; set; }
+    public bool UseRestrictedWindowsToken { get; set; }
 }
 
 public interface IReportWorkerTransport
@@ -164,17 +165,30 @@ internal sealed class ProcessReportWorkerTransport : IReportWorkerTransport
         var start = WorkerCommand.Create(options);
         var temporaryDirectory = options.WorkingDirectory == null ? Directory.CreateTempSubdirectory("report-worker-") : null;
         if (temporaryDirectory != null) start.WorkingDirectory = temporaryDirectory.FullName;
-        using var process = new Process { StartInfo = start };
+        WindowsRestrictedProcess? restrictedProcess = null;
+        Process? process = null;
         try
         {
-            if (!process.Start()) throw new ReportWorkerProcessException("The report worker process could not be started.");
+            restrictedProcess = options.UseRestrictedWindowsToken && OperatingSystem.IsWindows() ? WindowsRestrictedProcess.Start(start) : null;
+            process = restrictedProcess?.Process ?? new Process { StartInfo = start };
+            if (restrictedProcess == null && !process.Start()) throw new ReportWorkerProcessException("The report worker process could not be started.");
+            var standardInput = restrictedProcess?.StandardInput ?? process.StandardInput;
+            var standardOutput = restrictedProcess?.StandardOutput ?? process.StandardOutput;
+            var standardError = restrictedProcess?.StandardError ?? process.StandardError;
             using var job = WindowsJobResourceLimit.Attach(process, options.MemoryLimitBytes);
-            await process.StandardInput.WriteLineAsync(ReportWorkerProtocol.Serialize(request)).ConfigureAwait(false);
-            process.StandardInput.Close();
+            try
+            {
+                await standardInput.WriteLineAsync(ReportWorkerProtocol.Serialize(request)).ConfigureAwait(false);
+            }
+            catch (IOException) when (process.HasExited)
+            {
+                throw new ReportWorkerProcessException($"The restricted report worker exited with code {process.ExitCode}: {await standardError.ReadToEndAsync().ConfigureAwait(false)}");
+            }
+            standardInput.Close();
             string? resultLine = null; long outputBytes = 0;
             while (true)
             {
-                var line = await process.StandardOutput.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+                var line = await standardOutput.ReadLineAsync(cancellationToken).ConfigureAwait(false);
                 if (line == null) break;
                 outputBytes += Encoding.UTF8.GetByteCount(line);
                 if (outputBytes > options.MaxOutputBytes) throw new ReportWorkerProcessException("The report worker exceeded the output limit.");
@@ -182,15 +196,20 @@ internal sealed class ProcessReportWorkerTransport : IReportWorkerTransport
                 resultLine = line;
             }
             await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-            if (process.ExitCode != 0) throw new ReportWorkerProcessException($"The report worker exited with code {process.ExitCode}: {await process.StandardError.ReadToEndAsync().ConfigureAwait(false)}");
-            return resultLine == null ? throw new ReportWorkerProcessException("The report worker returned no result.") : ReportWorkerProtocol.DeserializeResult(resultLine);
+            if (process.ExitCode != 0) throw new ReportWorkerProcessException($"The report worker exited with code {process.ExitCode}: {await standardError.ReadToEndAsync().ConfigureAwait(false)}");
+            if (resultLine == null)
+            {
+                var error = await standardError.ReadToEndAsync().ConfigureAwait(false);
+                throw new ReportWorkerProcessException($"The report worker returned no result (exit code {process.ExitCode}): {error}");
+            }
+            return ReportWorkerProtocol.DeserializeResult(resultLine);
         }
         catch
         {
-            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            if (process != null && !process.HasExited) process.Kill(entireProcessTree: true);
             throw;
         }
-        finally { temporaryDirectory?.Delete(recursive: true); }
+        finally { restrictedProcess?.Dispose(); process?.Dispose(); temporaryDirectory?.Delete(recursive: true); }
     }
 }
 
@@ -198,14 +217,34 @@ internal static class WorkerCommand
 {
     public static ProcessStartInfo Create(ReportWorkerClientOptions options)
     {
+        var workerPath = Path.GetFullPath(options.WorkerPath);
+        if (!Path.IsPathFullyQualified(workerPath) || !File.Exists(workerPath))
+            throw new ReportWorkerSecurityException($"The report worker path is missing or is not absolute: {options.WorkerPath}");
         var isDll = string.Equals(Path.GetExtension(options.WorkerPath), ".dll", StringComparison.OrdinalIgnoreCase);
-        var info = new ProcessStartInfo(isDll ? "dotnet" : options.WorkerPath)
+        var executable = isDll ? ResolveDotnetPath() : workerPath;
+        var info = new ProcessStartInfo(executable)
         {
-            WorkingDirectory = options.WorkingDirectory ?? Path.GetDirectoryName(Path.GetFullPath(options.WorkerPath))!, UseShellExecute = false,
+            WorkingDirectory = options.WorkingDirectory == null ? Path.GetDirectoryName(workerPath)! : Path.GetFullPath(options.WorkingDirectory), UseShellExecute = false,
             RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true
         };
-        if (isDll) info.ArgumentList.Add(options.WorkerPath);
+        if (!Directory.Exists(info.WorkingDirectory)) throw new ReportWorkerSecurityException($"The report worker working directory does not exist: {info.WorkingDirectory}");
+        info.Environment.Clear();
+        foreach (var name in new[] { "SystemRoot", "PATH", "TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "DOTNET_ROOT", "DOTNET_ROOT_X64" })
+        {
+            var value = Environment.GetEnvironmentVariable(name);
+            if (!string.IsNullOrWhiteSpace(value)) info.Environment[name] = value;
+        }
+        if (isDll) info.ArgumentList.Add(workerPath);
         return info;
+    }
+
+    private static string ResolveDotnetPath()
+    {
+        var host = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH");
+        if (!string.IsNullOrWhiteSpace(host) && Path.IsPathFullyQualified(host) && File.Exists(host)) return host;
+        var candidate = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "dotnet.exe");
+        if (OperatingSystem.IsWindows() && File.Exists(candidate)) return candidate;
+        return OperatingSystem.IsWindows() ? throw new ReportWorkerSecurityException("The dotnet host could not be resolved to an absolute path.") : "dotnet";
     }
 }
 

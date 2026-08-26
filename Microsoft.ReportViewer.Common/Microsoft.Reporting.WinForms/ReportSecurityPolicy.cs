@@ -101,8 +101,10 @@ public sealed class ReportSecurityPolicy
     {
         if (present)
         {
-            diagnostics.Add(new ReportSecurityDiagnostic(feature,
-                allowed ? ReportSecurityDiagnosticSeverity.Warning : ReportSecurityDiagnosticSeverity.Error, message));
+            diagnostics.Add(new ReportSecurityDiagnostic(
+                feature,
+                allowed ? ReportSecurityDiagnosticSeverity.Warning : ReportSecurityDiagnosticSeverity.Error,
+                message));
         }
     }
 }

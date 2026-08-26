@@ -35,6 +35,7 @@
 		<AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
 		<PackageCertificateThumbprint>8F66BA61E2AA3353311409ECE8388B01DAD5F877</PackageCertificateThumbprint>
 		<Platforms>x64</Platforms>
+		<Platform>x64</Platform>
 	</PropertyGroup>
 
 	<ItemGroup>
