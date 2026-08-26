@@ -55,23 +55,19 @@ public sealed class ReportCompilerRunner
 
     public static ReportCompilerRunner Parse(string[] args)
     {
-        if (!ReportCompilerUtility.ParseArguments(args))
-        {
-            throw new ArgumentException("The supplied arguments do not describe a report operation.", nameof(args));
-        }
-
-        return new ReportCompilerRunner(new ReportCompilerOptions(
-            ReportCompilerUtility.GetCurrentParameters(),
-            ReportCompilerUtility.GetCurrentSubReports()));
+        return new ReportCompilerRunner(ReportCompilerUtility.ParseRequest(args));
     }
 
     public static ReportCompilerRunner TryParse(string[] args)
     {
-        return ReportCompilerUtility.ParseArguments(args)
-            ? new ReportCompilerRunner(new ReportCompilerOptions(
-                ReportCompilerUtility.GetCurrentParameters(),
-                ReportCompilerUtility.GetCurrentSubReports()))
-            : null;
+        try
+        {
+            return new ReportCompilerRunner(ReportCompilerUtility.ParseRequest(args));
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
     }
 
     public void Execute(CancellationToken cancellationToken = default)

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Microsoft.ReportViewer.Design</AssemblyName>
+    <RootNamespace>Microsoft.Reporting.WinForms</RootNamespace>
+    <AssemblyVersion>15.0.0.0</AssemblyVersion>
+    <FileVersion>15.0.0.0</FileVersion>
+    <Version>15.0.0</Version>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>..\ReportViewerCore.snk</AssemblyOriginatorKeyFile>
+    <IsPackable>true</IsPackable>
+    <PackageId>ReportViewerCore.Design</PackageId>
+    <Description>Design-time support for the ReportViewer Core WinForms control.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Microsoft.ReportViewer.WinForms\Microsoft.ReportViewer.WinForms.csproj" />
+  </ItemGroup>
+</Project>

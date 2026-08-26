@@ -13,6 +13,32 @@ namespace RdlcCliReportCompiler.Tests;
 public sealed class ReportCompilerUtilityTests
 {
     [Fact]
+    public void ParseRequest_IsPureAndDoesNotReplaceLegacyFacadeState()
+    {
+        Parse("--ReportName", "Legacy", "--Mode", "Preview");
+
+        var request = ReportCompilerUtility.ParseRequest(new[] { "--ReportName", "Request", "--Mode", "Export" });
+
+        Assert.Equal("Request", request.Parameters["ReportName"]);
+        Assert.Equal("Export", request.Parameters["Mode"]);
+        Assert.Equal("Legacy", ReportCompilerUtility.GetCurrentParameters()["ReportName"]);
+        Assert.Equal("Preview", ReportCompilerUtility.GetCurrentParameters()["Mode"]);
+    }
+
+    [Fact]
+    public async Task ParseRequest_IsolatesConcurrentSnapshots()
+    {
+        var requests = await Task.WhenAll(
+            Task.Run(() => ReportCompilerUtility.ParseRequest(new[] { "--ReportName", "First", "--Mode", "Preview" })),
+            Task.Run(() => ReportCompilerUtility.ParseRequest(new[] { "--ReportName", "Second", "--Mode", "Export" })));
+
+        Assert.Equal("First", requests[0].Parameters["ReportName"]);
+        Assert.Equal("Preview", requests[0].Parameters["Mode"]);
+        Assert.Equal("Second", requests[1].Parameters["ReportName"]);
+        Assert.Equal("Export", requests[1].Parameters["Mode"]);
+    }
+
+    [Fact]
     public void ReportCompilerRunner_KeepsParsedOptionsIsolatedBetweenInstances()
     {
         var first = ReportCompilerRunner.Parse(new[] { "--ReportName", "First", "--Mode", "Preview" });

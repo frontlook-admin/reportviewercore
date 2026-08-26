@@ -3,8 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Xml.Linq;
 
-namespace Microsoft.Reporting.WinForms
-{
+namespace Microsoft.Reporting.WinForms;
 
 public enum ReportSecurityFeature
 {
@@ -24,10 +23,7 @@ public enum ReportSecurityDiagnosticSeverity
 
 public sealed class ReportSecurityDiagnostic
 {
-    public ReportSecurityDiagnostic(
-        ReportSecurityFeature feature,
-        ReportSecurityDiagnosticSeverity severity,
-        string message)
+    public ReportSecurityDiagnostic(ReportSecurityFeature feature, ReportSecurityDiagnosticSeverity severity, string message)
     {
         Feature = feature;
         Severity = severity;
@@ -35,33 +31,27 @@ public sealed class ReportSecurityDiagnostic
     }
 
     public ReportSecurityFeature Feature { get; }
-
     public ReportSecurityDiagnosticSeverity Severity { get; }
-
     public string Message { get; }
 }
 
 public sealed class ReportSecurityAnalysis
 {
-    internal ReportSecurityAnalysis(IReadOnlyList<ReportSecurityDiagnostic> diagnostics)
-    {
-        Diagnostics = diagnostics;
-    }
+    internal ReportSecurityAnalysis(IReadOnlyList<ReportSecurityDiagnostic> diagnostics) => Diagnostics = diagnostics;
 
     public IReadOnlyList<ReportSecurityDiagnostic> Diagnostics { get; }
-
     public bool IsAllowed => Diagnostics.All(diagnostic => diagnostic.Severity != ReportSecurityDiagnosticSeverity.Error);
 }
 
 /// <summary>
-/// Opt-in policy for report features that can execute code or access external resources.
-/// This policy is a restriction and diagnostics contract; it is not an in-process sandbox.
+/// Restriction and diagnostics contract for report features that can execute code or access external resources.
+/// This is not an in-process sandbox or isolation boundary.
 /// </summary>
 public sealed class ReportSecurityPolicy
 {
-    public static ReportSecurityPolicy Default => new ReportSecurityPolicy();
+    public static ReportSecurityPolicy Default => new();
 
-    public static ReportSecurityPolicy Restrictive => new ReportSecurityPolicy
+    public static ReportSecurityPolicy Restrictive => new()
     {
         EnforceTrustedReportDefinition = true,
         AllowCustomCode = false,
@@ -71,23 +61,16 @@ public sealed class ReportSecurityPolicy
     };
 
     public bool EnforceTrustedReportDefinition { get; set; }
-
     public bool AllowCustomCode { get; set; } = true;
-
     public bool AllowExternalImages { get; set; } = true;
-
     public bool AllowHyperlinks { get; set; } = true;
-
     public bool AllowAssemblies { get; set; } = true;
 
     public ReportSecurityAnalysis Analyze(string reportDefinition, bool isTrusted = false)
     {
-        if (reportDefinition == null)
-        {
-            throw new ArgumentNullException(nameof(reportDefinition));
-        }
-
+        ArgumentNullException.ThrowIfNull(reportDefinition);
         var diagnostics = new List<ReportSecurityDiagnostic>();
+
         if (EnforceTrustedReportDefinition && !isTrusted)
         {
             diagnostics.Add(new ReportSecurityDiagnostic(
@@ -98,50 +81,28 @@ public sealed class ReportSecurityPolicy
 
         var document = XDocument.Parse(reportDefinition, LoadOptions.PreserveWhitespace);
         var elements = document.Descendants();
-        AddFeatureDiagnostic(
-            diagnostics,
-            ReportSecurityFeature.CustomCode,
+        AddFeatureDiagnostic(diagnostics, ReportSecurityFeature.CustomCode,
             elements.Any(element => element.Name.LocalName == "Code" && !string.IsNullOrWhiteSpace(element.Value)),
-            AllowCustomCode,
-            "The report contains custom code that may execute during report processing.");
-        AddFeatureDiagnostic(
-            diagnostics,
-            ReportSecurityFeature.ExternalImages,
+            AllowCustomCode, "The report contains custom code that may execute during report processing.");
+        AddFeatureDiagnostic(diagnostics, ReportSecurityFeature.ExternalImages,
             elements.Any(element => element.Name.LocalName == "Image" && element.Elements().Any(child => child.Name.LocalName == "Source" && string.Equals(child.Value.Trim(), "External", StringComparison.OrdinalIgnoreCase))),
-            AllowExternalImages,
-            "The report references external images and may perform network or file access.");
-        AddFeatureDiagnostic(
-            diagnostics,
-            ReportSecurityFeature.Hyperlinks,
+            AllowExternalImages, "The report references external images and may perform network or file access.");
+        AddFeatureDiagnostic(diagnostics, ReportSecurityFeature.Hyperlinks,
             elements.Any(element => element.Name.LocalName == "Hyperlink" && !string.IsNullOrWhiteSpace(element.Value)),
-            AllowHyperlinks,
-            "The report contains hyperlinks that may navigate outside the host application.");
-        AddFeatureDiagnostic(
-            diagnostics,
-            ReportSecurityFeature.Assemblies,
-            elements.Any(element => element.Name.LocalName == "CodeModule" && !string.IsNullOrWhiteSpace(element.Value)),
-            AllowAssemblies,
-            "The report references custom assemblies that are loaded into the report execution environment.");
+            AllowHyperlinks, "The report contains hyperlinks that may navigate outside the host application.");
+        AddFeatureDiagnostic(diagnostics, ReportSecurityFeature.Assemblies,
+            elements.Any(element => element.Name.LocalName is "CodeModule" or "CodeModules" && !string.IsNullOrWhiteSpace(element.Value)),
+            AllowAssemblies, "The report references custom assemblies that are loaded into the report execution environment.");
 
         return new ReportSecurityAnalysis(diagnostics);
     }
 
-    private static void AddFeatureDiagnostic(
-        ICollection<ReportSecurityDiagnostic> diagnostics,
-        ReportSecurityFeature feature,
-        bool present,
-        bool allowed,
-        string message)
+    private static void AddFeatureDiagnostic(ICollection<ReportSecurityDiagnostic> diagnostics, ReportSecurityFeature feature, bool present, bool allowed, string message)
     {
-        if (!present)
+        if (present)
         {
-            return;
+            diagnostics.Add(new ReportSecurityDiagnostic(feature,
+                allowed ? ReportSecurityDiagnosticSeverity.Warning : ReportSecurityDiagnosticSeverity.Error, message));
         }
-
-        diagnostics.Add(new ReportSecurityDiagnostic(
-            feature,
-            allowed ? ReportSecurityDiagnosticSeverity.Warning : ReportSecurityDiagnosticSeverity.Error,
-            message));
     }
-}
 }

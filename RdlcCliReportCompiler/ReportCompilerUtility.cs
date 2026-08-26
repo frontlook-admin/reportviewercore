@@ -2,6 +2,7 @@ using FrontLookCoreDbAccessLibrary.Desktop.Rdlc.FL_RDLC;
 using FrontLookCoreLibraryAssembly.FL_General;
 using FrontLookCoreLibraryAssembly.FL_GlobalClasses;
 using Microsoft.Reporting.WinForms;
+using Headless = Microsoft.Reporting.NETCore;
 using Microsoft.ReportViewer.WinForms.FrontLookCode;
 using System;
 using System.Collections.Generic;
@@ -201,6 +202,31 @@ Example:
                 return false;
             }
 
+            var request = ParseRequest(args);
+            foreach (var parameter in request.Parameters)
+            {
+                GetParameters[parameter.Key] = parameter.Value;
+            }
+
+            foreach (var subReport in request.SubReports)
+            {
+                GetSubReports[subReport.Key] = subReport.Value;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Parses report arguments without reading or changing the legacy facade state.
+        /// </summary>
+        public static ReportCompilerOptions ParseRequest(string[] args)
+        {
+            ArgumentNullException.ThrowIfNull(args);
+            if (args.Length == 0)
+            {
+                throw new ArgumentException("At least one report argument is required.", nameof(args));
+            }
+
             var parsedParameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var parsedSubReports = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -233,17 +259,7 @@ Example:
                 }
             }
 
-            foreach (var parameter in parsedParameters)
-            {
-                GetParameters[parameter.Key] = parameter.Value;
-            }
-
-            foreach (var subReport in parsedSubReports)
-            {
-                GetSubReports[subReport.Key] = subReport.Value;
-            }
-
-            return true;
+            return new ReportCompilerOptions(parsedParameters, parsedSubReports);
         }
 
         /// <summary>
@@ -553,7 +569,7 @@ Example:
                         PrintReport(report);
                         break;
                     case ExportMode:
-                        ExportReport(report, cancellationToken);
+                        ExportHeadlessReport(dataSet, report, cancellationToken);
                         break;
                     default:
                         throw new ArgumentException($"Invalid mode: {mode}. Supported modes: Preview, Print, PrintSetup, PrintSettings, Export");
@@ -624,26 +640,10 @@ Example:
                 }
             }
 
-            using var localReport = new LocalReport();
-            using (var reportStream = File.OpenRead(reportPath))
-            {
-                localReport.LoadReportDefinition(reportStream);
-            }
-
-            foreach (var dataSourceName in localReport.GetDataSourceNames())
-            {
-                if (!dataSet.Tables.Contains(dataSourceName))
-                {
-                    throw new InvalidDataException($"Missing report data source: {dataSourceName}");
-                }
-            }
-
-            foreach (DataTable table in dataSet.Tables)
-            {
-                localReport.DataSources.Add(new ReportDataSource(table.TableName, table));
-            }
-
-            var parameterValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var dataSources = dataSet.Tables.Cast<DataTable>()
+                .Select(table => new Headless.HeadlessReportDataSource(table.TableName, table))
+                .ToArray();
+            var parameters = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
             if (dataSet.Tables.Contains(ParametersTableName))
             {
                 var parameterTable = dataSet.Tables[ParametersTableName];
@@ -657,36 +657,22 @@ Example:
                     var name = row["Name"]?.ToString();
                     if (!string.IsNullOrWhiteSpace(name))
                     {
-                        parameterValues[name] = row["Value"]?.ToString() ?? string.Empty;
+                        parameters[name] = new[] { row["Value"]?.ToString() ?? string.Empty };
                     }
                 }
             }
 
-            var missingParameters = localReport.GetParameters()
-                .Where(parameter => !parameterValues.ContainsKey(parameter.Name))
-                .Select(parameter => parameter.Name)
-                .ToArray();
-            if (missingParameters.Length > 0)
-            {
-                throw new InvalidDataException($"Missing report parameters: {string.Join(", ", missingParameters)}");
-            }
-
-            if (parameterValues.Count > 0)
-            {
-                localReport.SetParameters(localReport.GetParameters().Select(parameter => new ReportParameter(parameter.Name, parameterValues[parameter.Name])));
-            }
-
-            foreach (var subReport in GetSubReports)
-            {
-                using var subReportStream = File.OpenRead(subReport.Value);
-                localReport.LoadSubreportDefinition(subReport.Key, subReportStream);
-            }
-
-            var availableFormats = localReport.ListRenderingExtensions().Select(extension => extension.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var subreports = GetSubReports.Select(subreport =>
+                new Headless.HeadlessSubreportDefinition(subreport.Key, File.ReadAllBytes(subreport.Value), dataSources)).ToArray();
             if (normalizedMode == ExportMode)
             {
                 var requestedFormat = GetRequiredParameter("ExportFormat");
-                if (!availableFormats.Contains(requestedFormat))
+                using var formatReport = new Headless.LocalReport();
+                var availableFormats = formatReport.ListRenderingExtensions()
+                    .Select(extension => extension.Name)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var rendererFormat = Headless.HeadlessReportRenderer.GetRendererFormatName(requestedFormat);
+                if (!availableFormats.Contains(rendererFormat))
                 {
                     throw new ArgumentException($"Unsupported export format: {requestedFormat}");
                 }
@@ -698,8 +684,10 @@ Example:
                 }
             }
 
+            Headless.HeadlessReportRenderer.Validate(new Headless.HeadlessReportRequest(
+                File.ReadAllBytes(reportPath), dataSources, parameters, subreports,
+                GetOptionalParameter("ExportFormat") ?? "PDF", cancellationToken: cancellationToken));
             ThrowIfCancellationRequested(cancellationToken);
-            _ = localReport.GetTotalPages(out _);
             LogInfo("inputs_validated", reportPath, null, new { ReportName = reportName, Tables = dataSet.Tables.Count });
         }
 
@@ -920,6 +908,73 @@ Example:
             }
         }
 
+        private static void ExportHeadlessReport(DataSet dataSet, FL_IRdlcReport report, CancellationToken cancellationToken)
+        {
+            ThrowIfCancellationRequested(cancellationToken);
+            var exportPath = Path.GetFullPath(GetRequiredParameter("ExportPath"));
+            var requestedFormat = GetRequiredParameter("ExportFormat");
+            var exportDirectory = Path.GetDirectoryName(exportPath);
+            if (string.IsNullOrEmpty(exportDirectory) || string.IsNullOrWhiteSpace(Path.GetFileName(exportPath)))
+                throw new ArgumentException("ExportPath must include a valid output file name.");
+
+            var dataSources = dataSet.Tables.Cast<DataTable>()
+                .Select(table => new Headless.HeadlessReportDataSource(table.TableName, table))
+                .ToArray();
+            var parameters = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+            if (dataSet.Tables.Contains(ParametersTableName))
+            {
+                foreach (DataRow row in dataSet.Tables[ParametersTableName].Rows)
+                {
+                    var name = row["Name"]?.ToString();
+                    if (!string.IsNullOrWhiteSpace(name))
+                        parameters[name] = new[] { row["Value"]?.ToString() ?? string.Empty };
+                }
+            }
+
+            var subreports = GetSubReports.Select(subreport =>
+                new Headless.HeadlessSubreportDefinition(subreport.Key, File.ReadAllBytes(subreport.Value), dataSources)).ToArray();
+            var deviceInfo = report.PrintSettings?.CPageSettings == null
+                ? null
+                : ReportViewer.CreateExportDeviceInfo(report.PrintSettings);
+            var result = Headless.HeadlessReportRenderer.Render(new Headless.HeadlessReportRequest(
+                File.ReadAllBytes(GetRequiredParameter("ReportPath")), dataSources, parameters,
+                subreports, requestedFormat, deviceInfo, cancellationToken));
+
+            Directory.CreateDirectory(exportDirectory);
+            var temporaryFiles = new List<string>();
+            try
+            {
+                LogInfo("export_started", exportPath, null, new { Format = Headless.HeadlessReportRenderer.GetRendererFormatName(requestedFormat) });
+                for (var index = 0; index < result.Streams.Count; index++)
+                {
+                    ThrowIfCancellationRequested(cancellationToken);
+                    var stream = result.Streams[index];
+                    var targetPath = index == 0
+                        ? exportPath
+                        : Path.Combine(exportDirectory, $"{Path.GetFileNameWithoutExtension(exportPath)}_{SanitizeFileName(stream.Name)}.{Headless.HeadlessReportRenderer.GetFileExtension(requestedFormat, stream.Extension)}");
+                    var temporaryPath = Path.Combine(exportDirectory, $".{Path.GetFileName(targetPath)}.{Guid.NewGuid():N}.tmp");
+                    File.WriteAllBytes(temporaryPath, stream.Content);
+                    temporaryFiles.Add(temporaryPath);
+                    File.Move(temporaryPath, targetPath, overwrite: true);
+                }
+
+                report.ExportFileName = exportPath;
+                LogInfo("export_succeeded", exportPath, null, new { Bytes = result.Content.Length, Streams = result.Streams.Count });
+            }
+            finally
+            {
+                foreach (var temporaryFile in temporaryFiles.Where(File.Exists))
+                    File.Delete(temporaryFile);
+            }
+        }
+
+        private static string SanitizeFileName(string name)
+        {
+            var invalid = Path.GetInvalidFileNameChars();
+            var sanitized = new string(name.Select(character => invalid.Contains(character) ? '_' : character).ToArray());
+            return string.IsNullOrWhiteSpace(sanitized) ? "resource" : sanitized;
+        }
+
         private static byte[] RenderExport(FL_IRdlcReport report)
         {
             using var localReport = report.GetExportReport();
@@ -935,7 +990,7 @@ Example:
 
         internal static string GetRendererFormatName(ExportFormat format)
         {
-            return format == ExportFormat.HTML4_0 ? "HTML4.0" : format.ToString();
+            return Headless.HeadlessReportRenderer.GetRendererFormatName(format.ToString());
         }
 
         /// <summary>

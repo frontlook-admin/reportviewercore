@@ -5,6 +5,7 @@ using Microsoft.ReportingServices.Diagnostics;
 using Microsoft.ReportingServices.Interfaces;
 using Microsoft.ReportingServices.OnDemandReportRendering;
 using Microsoft.ReportingServices.ReportProcessing;
+using Microsoft.Reporting.WinForms;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -37,6 +38,10 @@ namespace Microsoft.Reporting.NETCore
 		private bool m_enableHyperlinks;
 
 		private bool m_enableExternalImages;
+
+		private ReportSecurityPolicy m_securityPolicy = ReportSecurityPolicy.Default;
+
+		private IReadOnlyList<ReportSecurityDiagnostic> m_securityDiagnostics = Array.Empty<ReportSecurityDiagnostic>();
 
 		private NameValueCollection m_parentSuppliedParameters;
 
@@ -166,6 +171,34 @@ namespace Microsoft.Reporting.NETCore
 				}
 			}
 		}
+
+		/// <summary>Opt-in restrictions for report code and external resources.</summary>
+		[Category("Security")]
+		[Browsable(false)]
+		public ReportSecurityPolicy SecurityPolicy
+		{
+			get
+			{
+				lock (m_syncObject)
+				{
+					return m_securityPolicy;
+				}
+			}
+			set
+			{
+				if (value == null)
+				{
+					throw new ArgumentNullException(nameof(value));
+				}
+				lock (m_syncObject)
+				{
+					m_securityPolicy = value;
+				}
+			}
+		}
+
+		[Browsable(false)]
+		public IReadOnlyList<ReportSecurityDiagnostic> SecurityDiagnostics => m_securityDiagnostics;
 
 		[NotifyParentProperty(true)]
 		[DefaultValue(true)]
@@ -445,17 +478,31 @@ namespace Microsoft.Reporting.NETCore
 
 		public override void LoadReportDefinition(TextReader report)
 		{
+			LoadReportDefinition(report, isTrusted: false);
+		}
+
+		/// <summary>Loads a definition after applying the configured policy. This is not an in-process sandbox boundary.</summary>
+		public void LoadReportDefinition(TextReader report, bool isTrusted)
+		{
 			lock (m_syncObject)
 			{
 				if (report == null)
 				{
 					throw new ArgumentNullException("report");
 				}
-				SetDirectReportDefinition("", report);
+				string definition = report.ReadToEnd();
+				ApplySecurityPolicy(definition, isTrusted);
+				SetDirectReportDefinition("", new StringReader(definition));
 			}
 		}
 
 		public void LoadSubreportDefinition(string reportName, TextReader report)
+		{
+			LoadSubreportDefinition(reportName, report, isTrusted: false);
+		}
+
+		/// <summary>Loads a subreport definition after applying the configured policy.</summary>
+		public void LoadSubreportDefinition(string reportName, TextReader report, bool isTrusted)
 		{
 			lock (m_syncObject)
 			{
@@ -471,7 +518,9 @@ namespace Microsoft.Reporting.NETCore
 				{
 					throw new ArgumentNullException("report");
 				}
-				SetDirectReportDefinition(reportName, report);
+				string definition = report.ReadToEnd();
+				ApplySecurityPolicy(definition, isTrusted);
+				SetDirectReportDefinition(reportName, new StringReader(definition));
 			}
 		}
 
@@ -481,7 +530,7 @@ namespace Microsoft.Reporting.NETCore
 			{
 				throw new ArgumentNullException("report");
 			}
-			LoadSubreportDefinition(reportName, new StreamReader(report));
+			LoadSubreportDefinition(reportName, new StreamReader(report), isTrusted: false);
 		}
 
 		private void SetDirectReportDefinition(string reportName, TextReader report)
@@ -493,6 +542,24 @@ namespace Microsoft.Reporting.NETCore
 			{
 				m_processingHost.Catalog.SetReportDefinition(reportName, reportBytes);
 			});
+		}
+
+		private void ApplySecurityPolicy(string definition, bool isTrusted)
+		{
+			ReportSecurityAnalysis analysis = SecurityPolicy.Analyze(definition, isTrusted);
+			m_securityDiagnostics = analysis.Diagnostics;
+			if (!analysis.IsAllowed)
+			{
+				var messages = new List<string>();
+				foreach (ReportSecurityDiagnostic diagnostic in analysis.Diagnostics)
+				{
+					if (diagnostic.Severity == ReportSecurityDiagnosticSeverity.Error)
+					{
+						messages.Add(diagnostic.Message);
+					}
+				}
+				throw new ReportSecurityException(string.Join(" ", messages));
+			}
 		}
 
 		internal override int PerformSearch(string searchText, int startPage, int endPage)

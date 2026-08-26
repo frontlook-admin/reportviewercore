@@ -37,6 +37,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Microsoft.ReportViewer.WinForms\Microsoft.ReportViewer.WinForms.csproj" />
+		<ProjectReference Include="..\Microsoft.ReportViewer.Design\Microsoft.ReportViewer.Design.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>
