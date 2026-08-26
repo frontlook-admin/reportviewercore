@@ -985,7 +985,8 @@ namespace Microsoft.Reporting.WinForms
 
 		internal override void InternalDeliverReportItem(string format, string deviceInfo, ExtensionSettings settings, string description, string eventType, string matchData)
 		{
-			throw new NotImplementedException();
+			throw new LocalProcessingException(
+				$"Local report item delivery is not supported by local processing (format '{format}', event type '{eventType}'). Render the report with Render(...) and handle the output in the host, or use ServerReport for server-side delivery.");
 		}
 
 		internal override DocumentMapNode GetDocumentMap(string rootLabel)

@@ -77,6 +77,8 @@ namespace Microsoft.Reporting.WinForms
 
         private SearchState m_searchState;
 
+        private readonly List<SearchMatchInfo> m_searchMatchMetadata = new List<SearchMatchInfo>();
+
         private bool m_userChangedSplitter;
 
         private PageCountMode m_pageCountMode = PageCountMode.Estimate;
@@ -188,6 +190,18 @@ namespace Microsoft.Reporting.WinForms
         private ToolStripRenderer m_toolStripRenderer = new ModernReportToolStripRenderer();
 
         private ReportViewerStatus m_status;
+
+        private ReportViewerState m_currentState;
+
+        private bool m_parameterDirty;
+
+        private readonly ReportViewerDiagnosticPanel m_diagnostics = new ReportViewerDiagnosticPanel();
+
+        private readonly ReportNavigationHistory m_navigationHistory = new ReportNavigationHistory();
+
+        private readonly ReportViewerKeyboardShortcutCollection m_keyboardShortcuts = CreateDefaultKeyboardShortcuts();
+
+        private Control m_focusOwner;
 
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Content)]
         [SRDescription("ServerReportDesc")]
@@ -862,6 +876,56 @@ namespace Microsoft.Reporting.WinForms
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public ToolStrip Toolbar => reportToolBar.ToolStrip;
 
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public ReportViewerDiagnosticPanel Diagnostics => m_diagnostics;
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Content)]
+        public ReportViewerKeyboardShortcutCollection KeyboardShortcuts => m_keyboardShortcuts;
+
+        [Category("Accessibility")]
+        [DefaultValue(true)]
+        public bool RestoreFocusAfterOperation { get; set; } = true;
+
+        [Browsable(false)]
+        public bool IsParameterDirty => m_parameterDirty;
+
+        public void AddDiagnostic(ReportViewerDiagnosticSeverity severity, string code, string message)
+        {
+            m_diagnostics.Add(severity, code, message);
+            UpdateUIState(m_lastUIState);
+        }
+
+        public void ClearDiagnostics()
+        {
+            m_diagnostics.Clear();
+            UpdateUIState(m_lastUIState);
+        }
+
+        public string ExportDiagnosticsSafe() => m_diagnostics.ExportSafeText();
+
+        /// <summary>Registers an application command and returns an owned disposable registration.</summary>
+        public IDisposable RegisterCommand(string name, string text, EventHandler click, System.Drawing.Image image = null)
+        {
+            var button = AddToolbarButton(name, text, click, image);
+            return new ReportViewerCommandRegistration(reportToolBar, button);
+        }
+
+        /// <summary>Clears current parameter values and rebuilds the prompt controls.</summary>
+        public void ResetParameters()
+        {
+            if (m_reportHierarchy.Count == 0)
+            {
+                return;
+            }
+
+            Report.SetParameters(Array.Empty<ReportParameter>());
+            m_parameterDirty = false;
+            rsParams.EnsureParamsLoaded();
+            UpdateUIState(m_lastUIState);
+        }
+
         /// <summary>
         /// Adds an application-owned button immediately before the built-in theme menu.
         /// The caller owns the supplied image and is responsible for disposing it.
@@ -947,6 +1011,10 @@ namespace Microsoft.Reporting.WinForms
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public ReportViewerStatus CurrentStatus => m_status;
 
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public ReportViewerState CurrentState => m_currentState;
+
         [Category("Behavior")]
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Content)]
         public ReportViewerLiveReloadOptions LiveReload => m_liveReload;
@@ -1031,10 +1099,18 @@ namespace Microsoft.Reporting.WinForms
         public string SearchText => m_searchState?.Text;
 
         [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public ReportNavigationHistory NavigationHistory => m_navigationHistory;
+
+        [Browsable(false)]
         public IReadOnlyList<SearchMatchInfo> SearchMatches
         {
             get
             {
+                if (m_searchMatchMetadata.Count > 0)
+                {
+                    return m_searchMatchMetadata.AsReadOnly();
+                }
                 if (m_reportHierarchy.Count == 0 || CurrentReport.GdiRenderer?.Context?.SearchMatches == null)
                 {
                     return Array.Empty<SearchMatchInfo>();
@@ -1061,6 +1137,7 @@ namespace Microsoft.Reporting.WinForms
 
             CurrentReport.GdiRenderer?.ClearSearchResults();
             m_searchState = null;
+            m_searchMatchMetadata.Clear();
             reportToolBar.ClearSearchText();
             UpdateUIState(m_lastUIState);
         }
@@ -1188,6 +1265,9 @@ namespace Microsoft.Reporting.WinForms
         [SRDescription("StateChangedEventDesc")]
         public event EventHandler<EventArgs> StatusChanged;
 
+        /// <summary>Raised after the immutable public viewer state changes.</summary>
+        public event EventHandler<ReportViewerStateChangedEventArgs> StateChanged;
+
         [SRDescription("SubmittingDataSourceCredentialsEventDesc")]
         public event ReportCredentialsEventHandler SubmittingDataSourceCredentials;
 
@@ -1204,6 +1284,9 @@ namespace Microsoft.Reporting.WinForms
                 m_theme = ReportViewerTheme.HighContrast;
             }
             InitializeComponent();
+            AccessibleName = "Report viewer";
+            AccessibleRole = AccessibleRole.Pane;
+            TabStop = true;
             reportToolBar.SetToolStripRenderer(m_toolStripRenderer);
             winRSviewer.SetToolStripRenderer(m_toolStripRenderer);
             reportToolBar.ThemeChange += OnThemeChange;
@@ -1216,6 +1299,7 @@ namespace Microsoft.Reporting.WinForms
             RenderingProgress += OnRenderingProgress;
             Reset();
             SetZoom();
+            m_currentState = CreateViewerState(m_lastUIState);
         }
 
         private void OnThemeChange(object sender, EventArgs e)
@@ -1225,6 +1309,12 @@ namespace Microsoft.Reporting.WinForms
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
+            if (m_keyboardShortcuts.TryGetCommand(keyData, out var configuredCommand))
+            {
+                ExecuteKeyboardCommand(configuredCommand);
+                return true;
+            }
+
             Keys key = keyData & Keys.KeyCode;
             Keys modifiers = keyData & Keys.Modifiers;
 
@@ -1315,6 +1405,77 @@ namespace Microsoft.Reporting.WinForms
             return base.ProcessCmdKey(ref msg, keyData);
         }
 
+        private static ReportViewerKeyboardShortcutCollection CreateDefaultKeyboardShortcuts()
+        {
+            return new ReportViewerKeyboardShortcutCollection
+            {
+                new ReportViewerKeyboardShortcut(ReportViewerKeyboardCommand.Refresh, Keys.F5),
+                new ReportViewerKeyboardShortcut(ReportViewerKeyboardCommand.Print, Keys.Control | Keys.P),
+                new ReportViewerKeyboardShortcut(ReportViewerKeyboardCommand.DirectPrint, Keys.Control | Keys.Shift | Keys.P),
+                new ReportViewerKeyboardShortcut(ReportViewerKeyboardCommand.Find, Keys.Control | Keys.F),
+                new ReportViewerKeyboardShortcut(ReportViewerKeyboardCommand.ZoomIn, Keys.Control | Keys.Add),
+                new ReportViewerKeyboardShortcut(ReportViewerKeyboardCommand.ZoomOut, Keys.Control | Keys.Subtract),
+                new ReportViewerKeyboardShortcut(ReportViewerKeyboardCommand.ResetZoom, Keys.Control | Keys.D0),
+                new ReportViewerKeyboardShortcut(ReportViewerKeyboardCommand.FirstPage, Keys.Home),
+                new ReportViewerKeyboardShortcut(ReportViewerKeyboardCommand.LastPage, Keys.End),
+                new ReportViewerKeyboardShortcut(ReportViewerKeyboardCommand.PreviousPage, Keys.PageUp),
+                new ReportViewerKeyboardShortcut(ReportViewerKeyboardCommand.NextPage, Keys.PageDown),
+                new ReportViewerKeyboardShortcut(ReportViewerKeyboardCommand.ClearSearch, Keys.Escape)
+            };
+        }
+
+        private void ExecuteKeyboardCommand(ReportViewerKeyboardCommand command)
+        {
+            switch (command)
+            {
+                case ReportViewerKeyboardCommand.Refresh:
+                    RefreshReport();
+                    break;
+                case ReportViewerKeyboardCommand.Print:
+                    PrintDialog();
+                    break;
+                case ReportViewerKeyboardCommand.DirectPrint:
+                    DPrint();
+                    break;
+                case ReportViewerKeyboardCommand.Find:
+                    reportToolBar.FocusSearch();
+                    break;
+                case ReportViewerKeyboardCommand.ClearSearch:
+                    if (SearchState != null) ClearSearch();
+                    else if (CurrentStatus?.InCancelableOperation == true) CancelRendering(0);
+                    break;
+                case ReportViewerKeyboardCommand.ZoomIn:
+                    ChangeZoomByKeyboard(10);
+                    break;
+                case ReportViewerKeyboardCommand.ZoomOut:
+                    ChangeZoomByKeyboard(-10);
+                    break;
+                case ReportViewerKeyboardCommand.ResetZoom:
+                    ZoomMode = ZoomMode.Percent;
+                    ZoomPercent = 100;
+                    break;
+                case ReportViewerKeyboardCommand.FirstPage:
+                    NavigateWithKeyboard(1);
+                    break;
+                case ReportViewerKeyboardCommand.LastPage:
+                    var totalPages = GetTotalPages(out var pageCountMode);
+                    NavigateWithKeyboard(pageCountMode == PageCountMode.Estimate ? int.MaxValue : totalPages);
+                    break;
+                case ReportViewerKeyboardCommand.PreviousPage:
+                    NavigateWithKeyboard(CurrentPage - 1);
+                    break;
+                case ReportViewerKeyboardCommand.NextPage:
+                    NavigateWithKeyboard(CurrentPage + 1);
+                    break;
+                case ReportViewerKeyboardCommand.Cancel:
+                    CancelRendering(0);
+                    break;
+                case ReportViewerKeyboardCommand.PreviousAction:
+                case ReportViewerKeyboardCommand.NextAction:
+                    break;
+            }
+        }
+
         private void ChangeZoomByKeyboard(int amount)
         {
             int zoomPercent = Math.Max(10, Math.Min(400, ZoomPercent + amount));
@@ -1398,6 +1559,7 @@ namespace Microsoft.Reporting.WinForms
 
         private void OnExport(object sender, ReportExportEventArgs e)
         {
+            CaptureOperationFocus();
             try
             {
                 if (this.ReportExport != null)
@@ -1408,6 +1570,7 @@ namespace Microsoft.Reporting.WinForms
                 {
                     ExportDialog(e.Extension, e.DeviceInfo);
                 }
+                RestoreOperationFocus();
             }
             catch (Exception e2)
             {
@@ -1417,6 +1580,7 @@ namespace Microsoft.Reporting.WinForms
 
         private void OnRefresh(object sender, EventArgs e)
         {
+            CaptureOperationFocus();
             try
             {
                 CancelEventArgs cancelEventArgs = new CancelEventArgs();
@@ -1444,6 +1608,7 @@ namespace Microsoft.Reporting.WinForms
 
         private void OnPrint(object sender, EventArgs e)
         {
+            CaptureOperationFocus();
             try
             {
                 ReportPrintEventArgs reportPrintEventArgs = new ReportPrintEventArgs(CreateDefaultPrintSettings());
@@ -1455,6 +1620,7 @@ namespace Microsoft.Reporting.WinForms
                 {
                     PrintDialog(reportPrintEventArgs.PrinterSettings);
                 }
+                RestoreOperationFocus();
             }
             catch (Exception e2)
             {
@@ -1611,6 +1777,7 @@ namespace Microsoft.Reporting.WinForms
         private bool OnError(Exception e)
         {
             m_lastError = e;
+            m_diagnostics.Add(ReportViewerDiagnosticSeverity.Error, e.GetType().Name, e.Message);
             if (this.ReportError != null)
             {
                 ReportErrorEventArgs reportErrorEventArgs = new ReportErrorEventArgs(e);
@@ -1764,6 +1931,7 @@ namespace Microsoft.Reporting.WinForms
 
         private void OnSubmittingParameterValues(object sender, ReportParametersEventArgs parameterArgs)
         {
+            m_parameterDirty = true;
             if (this.SubmittingParameterValues != null)
             {
                 this.SubmittingParameterValues(this, parameterArgs);
@@ -1827,6 +1995,9 @@ namespace Microsoft.Reporting.WinForms
             rsParams.Visible = false;
             rsParams.BackColor = System.Drawing.SystemColors.Control;
             rsParams.Name = "rsParams";
+            rsParams.AccessibleName = "Report parameters";
+            rsParams.AccessibleRole = AccessibleRole.Grouping;
+            rsParams.TabIndex = 1;
             rsParams.ViewButtonClick += new System.EventHandler(OnViewButtonClick);
             rsParams.SubmitDataSourceCredentials += new Microsoft.Reporting.WinForms.ReportCredentialsEventHandler(OnSubmittingDataSourceCredentials);
             rsParams.SubmitParameters += new Microsoft.Reporting.WinForms.ReportParametersEventHandler(OnSubmittingParameterValues);
@@ -1848,6 +2019,9 @@ namespace Microsoft.Reporting.WinForms
             rsDocMap.BorderStyle = System.Windows.Forms.BorderStyle.None;
             rsDocMap.HotTracking = true;
             rsDocMap.Name = "rsDocMap";
+            rsDocMap.AccessibleName = "Document map";
+            rsDocMap.AccessibleRole = AccessibleRole.Outline;
+            rsDocMap.TabIndex = 2;
             rsDocMap.RightToLeftLayout = true;
             rsDocMap.DocumentMapNavigation += new Microsoft.Reporting.WinForms.DocumentMapNavigationEventHandler(OnDocumentMapNavigation);
             winRSviewer.AutoScroll = true;
@@ -1856,6 +2030,9 @@ namespace Microsoft.Reporting.WinForms
             winRSviewer.BackColor = System.Drawing.Color.FromArgb(243, 246, 250);
             winRSviewer.CausesValidation = false;
             winRSviewer.Name = "winRSviewer";
+            winRSviewer.AccessibleName = "Report preview";
+            winRSviewer.AccessibleRole = AccessibleRole.Pane;
+            winRSviewer.TabIndex = 3;
             winRSviewer.ShowContextMenu = true;
             winRSviewer.PageNavigation += new Microsoft.Reporting.WinForms.InternalPageNavigationEventHandler(OnPageNavigation);
             winRSviewer.ZoomChange += new Microsoft.Reporting.WinForms.ZoomChangedEventHandler(OnZoomChanged);
@@ -1870,6 +2047,9 @@ namespace Microsoft.Reporting.WinForms
             reportToolBar.Size = new Size(396, 40);
             reportToolBar.BackColor = System.Drawing.Color.FromArgb(248, 250, 252);
             reportToolBar.Name = "reportToolBar";
+            reportToolBar.AccessibleName = "Report toolbar";
+            reportToolBar.AccessibleRole = AccessibleRole.ToolBar;
+            reportToolBar.TabIndex = 0;
             reportToolBar.ZoomChange += new Microsoft.Reporting.WinForms.ZoomChangedEventHandler(OnZoomChanged);
             reportToolBar.ReportRefresh += new System.EventHandler(OnRefresh);
             reportToolBar.PageSetup += new System.EventHandler(OnPageSetup);
@@ -1882,6 +2062,8 @@ namespace Microsoft.Reporting.WinForms
             reportToolBar.PageNavigation += new Microsoft.Reporting.WinForms.PageNavigationEventHandler(OnPageNavigation);
             reportStatusStrip.Dock = DockStyle.Bottom;
             reportStatusStrip.Name = "reportStatusStrip";
+            reportStatusStrip.AccessibleName = "Report status";
+            reportStatusStrip.AccessibleRole = AccessibleRole.StatusBar;
             reportStatusStrip.SizingGrip = false;
             reportStatusStrip.TabStop = false;
             reportStatusStrip.Items.AddRange(new ToolStripItem[] { statusMessage, statusProgress, statusZoom });
@@ -1981,6 +2163,7 @@ namespace Microsoft.Reporting.WinForms
             }
             PerformPostRenderAction(args);
             UpdateUIState(state);
+            RestoreOperationFocus();
         }
 
         internal bool CanMoveToPage(int page)
@@ -2041,6 +2224,7 @@ namespace Microsoft.Reporting.WinForms
                 }
                 if (!drillthroughEventArgs.Cancel)
                 {
+                    m_navigationHistory.Record(new ReportNavigationEntry(GetNavigationReportKey(), CurrentPage, ReportNavigationKind.Drillthrough, reportPath));
                     PushReport(localReport, serverReport);
                     RenderReportWithNewParameters(1, null);
                 }
@@ -2440,7 +2624,57 @@ namespace Microsoft.Reporting.WinForms
 
         public void RefreshReport()
         {
+            CaptureOperationFocus();
             RefreshReport(1, null);
+        }
+
+        private void CaptureOperationFocus()
+        {
+            if (!RestoreFocusAfterOperation)
+            {
+                m_focusOwner = null;
+                return;
+            }
+
+            Control focused = FindFocusedControl(this);
+            m_focusOwner = focused == null || ReferenceEquals(focused, this) ? null : focused;
+        }
+
+        private void RestoreOperationFocus()
+        {
+            if (!RestoreFocusAfterOperation)
+            {
+                return;
+            }
+
+            Control focusOwner = m_focusOwner;
+            m_focusOwner = null;
+            if (focusOwner != null && !focusOwner.IsDisposed && focusOwner.CanFocus)
+            {
+                focusOwner.Focus();
+            }
+            else if (CanFocus)
+            {
+                Focus();
+            }
+        }
+
+        private static Control FindFocusedControl(Control root)
+        {
+            foreach (Control child in root.Controls)
+            {
+                if (child.Focused)
+                {
+                    return child;
+                }
+
+                if (child.ContainsFocus)
+                {
+                    return FindFocusedControl(child);
+                }
+            }
+
+            return root.Focused ? root : null;
         }
 
         private void RefreshReport(int targetPage, PostRenderArgs postRenderArgs)
@@ -2465,6 +2699,7 @@ namespace Microsoft.Reporting.WinForms
         {
             int defaultEndPageForStartPage = GetDefaultEndPageForStartPage(startPage);
             m_searchState = null;
+            m_searchMatchMetadata.Clear();
             return Find(searchString, startPage, defaultEndPageForStartPage);
         }
 
@@ -2495,9 +2730,29 @@ namespace Microsoft.Reporting.WinForms
                 {
                     SetViewForCurrentPage(UIState.ProcessingSuccess, new PostRenderArgs(ActionType.Search, searchString, winRSviewer.ReportPanelAutoScrollPosition));
                 }
+                UpdateSearchMatchMetadata();
                 RaiseSearchMatchChanged();
             }
             return num;
+        }
+
+        private void UpdateSearchMatchMetadata()
+        {
+            if (CurrentReport.GdiRenderer?.Context?.SearchMatches == null)
+            {
+                return;
+            }
+
+            int page = CurrentPage;
+            foreach (SearchMatchInfo match in CurrentReport.GdiRenderer.Context.SearchMatches
+                .Select((value, index) => new SearchMatchInfo(value.Text, page, index, value.Point)))
+            {
+                if (!m_searchMatchMetadata.Any(existing => existing.PageNumber == match.PageNumber
+                    && existing.MatchIndex == match.MatchIndex && existing.Point == match.Point))
+                {
+                    m_searchMatchMetadata.Add(match);
+                }
+            }
         }
 
         private int GetDefaultEndPageForStartPage(int startPage)
@@ -2550,6 +2805,7 @@ namespace Microsoft.Reporting.WinForms
             int num = Report.PerformBookmarkNavigation(bookmarkId, out uniqueName);
             if (num > 0)
             {
+                m_navigationHistory.Record(new ReportNavigationEntry(GetNavigationReportKey(), num, ReportNavigationKind.Bookmark, bookmarkId));
                 SetCurrentPage(num, ActionType.BookmarkLink, uniqueName);
             }
         }
@@ -2559,8 +2815,14 @@ namespace Microsoft.Reporting.WinForms
             int num = Report.PerformDocumentMapNavigation(documentMapId);
             if (num > 0)
             {
+                m_navigationHistory.Record(new ReportNavigationEntry(GetNavigationReportKey(), num, ReportNavigationKind.DocumentMap, documentMapId));
                 SetCurrentPage(num, ActionType.DocumentMap, documentMapId);
             }
+        }
+
+        private string GetNavigationReportKey()
+        {
+            return Report.GetType().FullName + ":" + Report.DisplayNameForUse;
         }
 
         private void RenderReportWithNewParameters(int pageNumber, PostRenderArgs postRenderArgs)
@@ -4140,6 +4402,7 @@ namespace Microsoft.Reporting.WinForms
             }
 
             m_reportHierarchy.Dispose();
+            m_navigationHistory.Dispose();
             base.Dispose(disposing);
         }
 
@@ -4743,20 +5006,22 @@ namespace Microsoft.Reporting.WinForms
             RowSelectionChanged?.Invoke(this, new ReportViewerRowSelectionChangedEventArgs(selection));
         }
 
-        public bool CopySelectedCell(int cellIndex = 0)
+        public string LastCopyDiagnostics { get; private set; }
+
+        public bool CopySelectedCell(int cellIndex = 0, ReportClipboardOptions options = null)
         {
             ReportViewerRowSelection selection = GetSelectedRowSelection();
             return selection != null && cellIndex >= 0 && cellIndex < selection.Cells.Count
-                && TrySetClipboardText(selection.Cells[cellIndex]);
+                && CopyRows(new[] { (IReadOnlyList<string>)new[] { selection.Cells[cellIndex] } }, options);
         }
 
-        public bool CopySelectedRow()
+        public bool CopySelectedRow(ReportClipboardOptions options = null)
         {
             ReportViewerRowSelection selection = GetSelectedRowSelection();
-            return selection != null && TrySetClipboardText(string.Join("\t", selection.Cells));
+            return selection != null && CopyRows(new[] { (IReadOnlyList<string>)selection.Cells }, options);
         }
 
-        public bool CopySelectedTable()
+        public bool CopySelectedTable(ReportClipboardOptions options = null)
         {
             GdiPage page = winRSviewer.CurrentGdiPage;
             ReportViewerRowSelection selection = GetSelectedRowSelection();
@@ -4765,10 +5030,11 @@ namespace Microsoft.Reporting.WinForms
                 return false;
             }
 
-            string table = string.Join(Environment.NewLine, page.RowTargets
+            var rows = page.RowTargets
                 .Where(target => string.Equals(target.Source, selection.Source, StringComparison.Ordinal))
-                .Select(target => string.Join("\t", target.Cells)));
-            return TrySetClipboardText(table);
+                .Select(target => (IReadOnlyList<string>)target.Cells)
+                .ToArray();
+            return CopyRows(rows, options);
         }
 
         private ReportViewerRowSelection GetSelectedRowSelection()
@@ -4780,19 +5046,27 @@ namespace Microsoft.Reporting.WinForms
                 : new ReportViewerRowSelection(CurrentPage, target.RowIndex, target.IsHeader, target.Source, target.SourceOrder, target.Cells);
         }
 
-        private static bool TrySetClipboardText(string text)
+        private bool CopyRows(IEnumerable<IReadOnlyList<string>> rows, ReportClipboardOptions options)
         {
             try
             {
-                Clipboard.SetText(text ?? string.Empty);
+                ReportClipboardPayload payload = ReportClipboardPayload.Create(rows, options);
+                LastCopyDiagnostics = payload.Diagnostics;
+                if (string.IsNullOrEmpty(payload.Text))
+                {
+                    return false;
+                }
+                Clipboard.SetDataObject(payload.ToDataObject(), copy: true);
                 return true;
             }
             catch (ExternalException)
             {
+                LastCopyDiagnostics = "The clipboard is unavailable.";
                 return false;
             }
             catch (InvalidOperationException)
             {
+                LastCopyDiagnostics = "The clipboard is unavailable.";
                 return false;
             }
         }
@@ -4948,6 +5222,52 @@ namespace Microsoft.Reporting.WinForms
             OnStatusChanged(this, EventArgs.Empty);
             m_canRenderForWaitControl = (m_lastUIState == UIState.ProcessingSuccess);
             m_lastUIState = newState;
+            PublishViewerState(newState);
+        }
+
+        private ReportViewerState CreateViewerState(UIState status)
+        {
+            var currentPage = 0;
+            var totalPages = 0;
+            var pageCountMode = m_pageCountMode;
+            if (m_reportHierarchy.Count > 0)
+            {
+                currentPage = Math.Max(CurrentReport.CurrentPage, 0);
+                try
+                {
+                    totalPages = Math.Max(GetTotalPages(out pageCountMode), 0);
+                }
+                catch (Exception exception) when (exception is InvalidOperationException || exception is ObjectDisposedException)
+                {
+                    totalPages = 0;
+                }
+            }
+
+            return new ReportViewerState(
+                currentPage,
+                totalPages,
+                pageCountMode,
+                ZoomMode,
+                ZoomPercent,
+                DisplayMode,
+                status == UIState.LongRunningAction,
+                m_lastError,
+                m_parameterDirty,
+                Volatile.Read(ref m_renderGeneration),
+                status);
+        }
+
+        private void PublishViewerState(UIState status)
+        {
+            var next = CreateViewerState(status);
+            var previous = m_currentState;
+            m_currentState = next;
+            if (previous != null && previous.Equals(next))
+            {
+                return;
+            }
+
+            StateChanged?.Invoke(this, new ReportViewerStateChangedEventArgs(previous ?? next, next));
         }
 
         private void RenderToGraphics(Graphics g)

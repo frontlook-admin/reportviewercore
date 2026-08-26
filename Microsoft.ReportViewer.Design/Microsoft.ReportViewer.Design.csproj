@@ -13,7 +13,12 @@
     <AssemblyOriginatorKeyFile>..\ReportViewerCore.snk</AssemblyOriginatorKeyFile>
     <IsPackable>true</IsPackable>
     <PackageId>ReportViewerCore.Design</PackageId>
+    <Authors>Microsoft, lkosson, Incredible Informatics</Authors>
+    <PackageTags>reportviewer;rdlc;winforms;visual-studio;designer</PackageTags>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <DevelopmentDependency>false</DevelopmentDependency>
     <Description>Design-time support for the ReportViewer Core WinForms control.</Description>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Microsoft.ReportViewer.WinForms\Microsoft.ReportViewer.WinForms.csproj" />

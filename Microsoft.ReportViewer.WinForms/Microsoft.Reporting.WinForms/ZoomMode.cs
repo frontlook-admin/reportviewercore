@@ -4,6 +4,7 @@ namespace Microsoft.Reporting.WinForms
 	{
 		FullPage,
 		PageWidth,
+		ActualSize,
 		Percent
 	}
 }

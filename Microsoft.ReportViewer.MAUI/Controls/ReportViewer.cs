@@ -67,6 +67,16 @@ public partial class ReportViewer : ContentView, INotifyPropertyChanged
 
     public static readonly BindableProperty LocalReportProperty =
         BindableProperty.Create(nameof(LocalReport), typeof(LocalReport), typeof(ReportViewer));
+    public static readonly BindableProperty SearchTextProperty =
+        BindableProperty.Create(nameof(SearchText), typeof(string), typeof(ReportViewer), string.Empty);
+    public static readonly BindableProperty ShowSearchProperty =
+        BindableProperty.Create(nameof(ShowSearch), typeof(bool), typeof(ReportViewer), true);
+    public static readonly BindableProperty ShowDocumentMapProperty =
+        BindableProperty.Create(nameof(ShowDocumentMap), typeof(bool), typeof(ReportViewer), true);
+    public static readonly BindableProperty EnableTouchGesturesProperty =
+        BindableProperty.Create(nameof(EnableTouchGestures), typeof(bool), typeof(ReportViewer), true);
+    public static readonly BindableProperty AccessibilitySettingsProperty =
+        BindableProperty.Create(nameof(AccessibilitySettings), typeof(MauiModels.ReportAccessibilitySettings), typeof(ReportViewer), new MauiModels.ReportAccessibilitySettings());
 
     #endregion
 
@@ -198,6 +208,12 @@ public partial class ReportViewer : ContentView, INotifyPropertyChanged
         private set => SetValue(LocalReportProperty, value);
     }
 
+    public string SearchText { get => (string)GetValue(SearchTextProperty); set => SetValue(SearchTextProperty, value); }
+    public bool ShowSearch { get => (bool)GetValue(ShowSearchProperty); set => SetValue(ShowSearchProperty, value); }
+    public bool ShowDocumentMap { get => (bool)GetValue(ShowDocumentMapProperty); set => SetValue(ShowDocumentMapProperty, value); }
+    public bool EnableTouchGestures { get => (bool)GetValue(EnableTouchGesturesProperty); set => SetValue(EnableTouchGesturesProperty, value); }
+    public MauiModels.ReportAccessibilitySettings AccessibilitySettings { get => (MauiModels.ReportAccessibilitySettings)GetValue(AccessibilitySettingsProperty); set => SetValue(AccessibilitySettingsProperty, value); }
+
     #endregion
 
     #region Events
@@ -221,6 +237,10 @@ public partial class ReportViewer : ContentView, INotifyPropertyChanged
     /// Raised when the user requests to print the report.
     /// </summary>
     public event EventHandler<MauiModels.ReportPrintEventArgs>? PrintRequested;
+    public event EventHandler<MauiModels.ReportSearchEventArgs>? SearchRequested;
+    public event EventHandler<MauiModels.ReportBookmarkEventArgs>? BookmarkNavigationRequested;
+    public event EventHandler<MauiModels.ReportDrillthroughEventArgs>? DrillthroughRequested;
+    public event EventHandler<MauiModels.ReportExportProgressEventArgs>? ExportProgressChanged;
 
     #endregion
 
@@ -234,6 +254,8 @@ public partial class ReportViewer : ContentView, INotifyPropertyChanged
     private readonly Label _pageLabel;
     private byte[]? _currentPdfData;
     private readonly ReportService _reportService;
+    private CancellationTokenSource? _operationCancellation;
+    private readonly List<MauiModels.ReportDocumentMapNode> _documentMap = new();
 
     #endregion
 
@@ -265,6 +287,25 @@ public partial class ReportViewer : ContentView, INotifyPropertyChanged
             HorizontalOptions = LayoutOptions.Fill,
             VerticalOptions = LayoutOptions.Fill
         };
+        AutomationProperties.SetName(_webView, AccessibilitySettings.ViewerAutomationName);
+        AutomationProperties.SetHelpText(_webView, "Report content. Use toolbar to navigate, zoom, search, or export.");
+        if (EnableTouchGestures)
+        {
+            var swipe = new SwipeGestureRecognizer { Direction = SwipeDirection.Left | SwipeDirection.Right };
+            swipe.Swiped += async (_, args) =>
+            {
+                if (args.Direction == SwipeDirection.Left) await GoToNextPageAsync();
+                else if (args.Direction == SwipeDirection.Right) await GoToPreviousPageAsync();
+            };
+            _webView.GestureRecognizers.Add(swipe);
+            var pinch = new PinchGestureRecognizer();
+            pinch.PinchUpdated += (_, args) =>
+            {
+                if (args.Status == GestureStatus.Running)
+                    ZoomLevel = Math.Clamp((int)(ZoomLevel * args.Scale), 25, 400);
+            };
+            _webView.GestureRecognizers.Add(pinch);
+        }
         Grid.SetRow(_webView, 1);
         _mainGrid.Add(_webView);
 
@@ -288,6 +329,7 @@ public partial class ReportViewer : ContentView, INotifyPropertyChanged
             VerticalOptions = LayoutOptions.Center,
             TextColor = Colors.Gray
         };
+        AutomationProperties.SetName(_statusLabel, AccessibilitySettings.StatusAutomationName);
         Grid.SetRow(_statusLabel, 1);
         _mainGrid.Add(_statusLabel);
 
@@ -584,9 +626,28 @@ public partial class ReportViewer : ContentView, INotifyPropertyChanged
     /// <summary>
     /// Exports the report to the specified format.
     /// </summary>
-    public async Task<byte[]> ExportAsync(string format, string? deviceInfo = null)
+    public Task<byte[]> ExportAsync(string format, string? deviceInfo = null)
+        => ExportAsync(format, deviceInfo, CancellationToken.None);
+
+    public async Task<byte[]> ExportAsync(string format, string? deviceInfo, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
-        return await Task.Run(() => _reportService.RenderReport(LocalReport, format, deviceInfo));
+        _operationCancellation?.Dispose();
+        _operationCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var operationToken = _operationCancellation.Token;
+        var operationProgress = new Progress<double>(value =>
+        {
+            progress?.Report(value);
+            ExportProgressChanged?.Invoke(this, new MauiModels.ReportExportProgressEventArgs(format, value, value >= 1));
+        });
+        try
+        {
+            return await _reportService.RenderReportAsync(LocalReport, format, deviceInfo, operationToken, operationProgress).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            ExportProgressChanged?.Invoke(this, new MauiModels.ReportExportProgressEventArgs(format, 0, false) { IsCanceled = true });
+            throw;
+        }
     }
 
     /// <summary>
@@ -618,6 +679,44 @@ public partial class ReportViewer : ContentView, INotifyPropertyChanged
     /// Gets the current rendered PDF data.
     /// </summary>
     public byte[]? GetCurrentPdfData() => _currentPdfData;
+
+    public IReadOnlyList<MauiModels.ReportDocumentMapNode> GetDocumentMap() => _documentMap;
+
+    public void SetDocumentMap(IEnumerable<MauiModels.ReportDocumentMapNode> nodes)
+    {
+        _documentMap.Clear();
+        _documentMap.AddRange(nodes);
+    }
+
+    public Task SearchAsync(string query)
+    {
+        SearchText = query ?? string.Empty;
+        var args = new MauiModels.ReportSearchEventArgs(SearchText);
+        SearchRequested?.Invoke(this, args);
+        if (!args.Cancel && args.MatchPage is int page && page > 0 && page <= TotalPages)
+        {
+            CurrentPage = page;
+            return NavigateToPageAsync(page);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task NavigateToBookmarkAsync(string target)
+    {
+        var args = new MauiModels.ReportBookmarkEventArgs(target);
+        BookmarkNavigationRequested?.Invoke(this, args);
+        return !args.Cancel && args.Page is int page && page > 0 && page <= TotalPages
+            ? NavigateToPageAsync(page)
+            : Task.CompletedTask;
+    }
+
+    public void RequestDrillthrough(string reportName, IReadOnlyDictionary<string, string>? parameters = null)
+    {
+        var args = new MauiModels.ReportDrillthroughEventArgs(reportName, parameters);
+        DrillthroughRequested?.Invoke(this, args);
+    }
+
+    public void CancelCurrentOperation() => _operationCancellation?.Cancel();
 
     #endregion
 

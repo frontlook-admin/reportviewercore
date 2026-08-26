@@ -9,6 +9,33 @@ namespace Microsoft.ReportViewer.MAUI.Tests;
 /// </summary>
 public class ReportModelsTests
 {
+    [Fact]
+    public void NavigationContracts_ShouldPreserveTargetsAndProgressBounds()
+    {
+        var node = new ReportDocumentMapNode { Id = "root", Label = "Summary", Page = 2 };
+        var search = new ReportSearchEventArgs("total") { MatchPage = 2 };
+        var bookmark = new ReportBookmarkEventArgs("summary") { Page = 2 };
+        var drillthrough = new ReportDrillthroughEventArgs("Detail", new Dictionary<string, string> { ["Id"] = "7" });
+        var progress = new ReportExportProgressEventArgs("PDF", 2.0, true);
+
+        node.Label.Should().Be("Summary");
+        search.MatchPage.Should().Be(2);
+        bookmark.Page.Should().Be(2);
+        drillthrough.Parameters["Id"].Should().Be("7");
+        progress.Progress.Should().Be(1);
+        progress.IsCompleted.Should().BeTrue();
+    }
+
+    [Fact]
+    public void AccessibilitySettings_ShouldProvideStableAutomationDefaults()
+    {
+        var settings = new ReportAccessibilitySettings();
+
+        settings.ViewerAutomationName.Should().Be("Report viewer");
+        settings.StatusAutomationName.Should().Be("Report status");
+        settings.ReduceMotion.Should().BeFalse();
+    }
+
     #region ReportDataSourceInfo Tests
 
     [Fact]

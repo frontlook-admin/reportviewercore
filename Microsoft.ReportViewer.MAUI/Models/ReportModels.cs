@@ -326,6 +326,71 @@ public class ReportNavigationEventArgs : EventArgs
     }
 }
 
+/// <summary>Represents a node in the report document map.</summary>
+public sealed class ReportDocumentMapNode
+{
+    public string Id { get; init; } = string.Empty;
+    public string Label { get; init; } = string.Empty;
+    public int? Page { get; init; }
+    public IList<ReportDocumentMapNode> Children { get; init; } = new List<ReportDocumentMapNode>();
+}
+
+/// <summary>Search request raised by a viewer host.</summary>
+public sealed class ReportSearchEventArgs : EventArgs
+{
+    public ReportSearchEventArgs(string query) => Query = query;
+    public string Query { get; }
+    public bool Cancel { get; set; }
+    public int? MatchPage { get; set; }
+}
+
+/// <summary>Bookmark or document-map navigation request.</summary>
+public sealed class ReportBookmarkEventArgs : EventArgs
+{
+    public ReportBookmarkEventArgs(string target) => Target = target;
+    public string Target { get; }
+    public bool Cancel { get; set; }
+    public int? Page { get; set; }
+}
+
+/// <summary>Drillthrough navigation request.</summary>
+public sealed class ReportDrillthroughEventArgs : EventArgs
+{
+    public ReportDrillthroughEventArgs(string reportName, IReadOnlyDictionary<string, string>? parameters = null)
+    {
+        ReportName = reportName;
+        Parameters = parameters ?? new Dictionary<string, string>();
+    }
+    public string ReportName { get; }
+    public IReadOnlyDictionary<string, string> Parameters { get; }
+    public bool Cancel { get; set; }
+}
+
+/// <summary>Progress notification for an export operation.</summary>
+public sealed class ReportExportProgressEventArgs : EventArgs
+{
+    public ReportExportProgressEventArgs(string format, double progress, bool isCompleted = false)
+    {
+        Format = format;
+        Progress = Math.Clamp(progress, 0, 1);
+        IsCompleted = isCompleted;
+    }
+    public string Format { get; }
+    public double Progress { get; }
+    public bool IsCompleted { get; }
+    public bool IsCanceled { get; init; }
+}
+
+/// <summary>Accessibility and adaptive-theme settings for the viewer.</summary>
+public sealed class ReportAccessibilitySettings
+{
+    public bool IsHighContrast { get; set; }
+    public bool IsDarkTheme { get; set; }
+    public bool ReduceMotion { get; set; }
+    public string ViewerAutomationName { get; set; } = "Report viewer";
+    public string StatusAutomationName { get; set; } = "Report status";
+}
+
 /// <summary>
 /// Settings for configuring the ReportViewer control.
 /// </summary>

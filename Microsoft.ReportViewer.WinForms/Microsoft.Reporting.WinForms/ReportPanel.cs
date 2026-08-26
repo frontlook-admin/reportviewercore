@@ -818,6 +818,12 @@ namespace Microsoft.Reporting.WinForms
 
 		private ToolStripMenuItem m_exportToolStripMenuItem;
 
+		private ToolStripMenuItem m_copyRowToolStripMenuItem;
+
+		private ToolStripMenuItem m_copyTableToolStripMenuItem;
+
+		private ToolStripMenuItem m_copyCellToolStripMenuItem;
+
 		private ToolStripMenuItem m_stopToolStripMenuItem;
 
 		private ToolStripMenuItem m_zoomToolStripMenuItem;
@@ -1144,6 +1150,24 @@ namespace Microsoft.Reporting.WinForms
 			m_stopToolStripMenuItem.Click += OnStopClick;
 			m_pageSetupToolStripMenuItem.Click += OnPageSettingsClick;
 			m_printerPageSettingsToolStripMenuItem.Click += OnPrinterPageSettingsClick;
+			m_copyRowToolStripMenuItem.Click += OnCopyRowClick;
+			m_copyTableToolStripMenuItem.Click += OnCopyTableClick;
+			m_copyCellToolStripMenuItem.Click += OnCopyCellClick;
+		}
+
+		private void OnCopyCellClick(object sender, EventArgs e)
+		{
+			ViewerControl?.CopySelectedCell();
+		}
+
+		private void OnCopyRowClick(object sender, EventArgs e)
+		{
+			ViewerControl?.CopySelectedRow();
+		}
+
+		private void OnCopyTableClick(object sender, EventArgs e)
+		{
+			ViewerControl?.CopySelectedTable();
 		}
 
 		private void OnDirectPrintClick(object sender, EventArgs e)
@@ -1290,17 +1314,23 @@ namespace Microsoft.Reporting.WinForms
 			m_pageSetupToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
 			m_printerPageSettingsToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
 			m_exportToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+			m_copyRowToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+			m_copyTableToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+			m_copyCellToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
 			m_stopToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
 			m_zoomToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
 			m_zoomInToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
 			m_zoomOutToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
 			m_contextMenu.SuspendLayout();
 			SuspendLayout();
-			m_contextMenu.Items.AddRange(new System.Windows.Forms.ToolStripItem[13]
+			m_contextMenu.Items.AddRange(new System.Windows.Forms.ToolStripItem[16]
 			{
 				m_documentMapToolStripMenuItem,
 				m_backToolStripMenuItem,
 				m_refreshToolStripMenuItem,
+				m_copyRowToolStripMenuItem,
+				m_copyTableToolStripMenuItem,
+				m_copyCellToolStripMenuItem,
 				m_dprintToolStripMenuItem,
 				m_printToolStripMenuItem,
 				m_printLayoutToolStripMenuItem,
@@ -1346,6 +1376,15 @@ namespace Microsoft.Reporting.WinForms
 			m_exportToolStripMenuItem.Name = "m_exportToolStripMenuItem";
 			m_exportToolStripMenuItem.Size = new System.Drawing.Size(157, 22);
 			m_exportToolStripMenuItem.Text = "Export <replaced by resource>";
+			m_copyRowToolStripMenuItem.Name = "m_copyRowToolStripMenuItem";
+			m_copyRowToolStripMenuItem.Size = new System.Drawing.Size(157, 22);
+			m_copyRowToolStripMenuItem.Text = "Copy Row";
+			m_copyTableToolStripMenuItem.Name = "m_copyTableToolStripMenuItem";
+			m_copyTableToolStripMenuItem.Size = new System.Drawing.Size(157, 22);
+			m_copyTableToolStripMenuItem.Text = "Copy Table";
+			m_copyCellToolStripMenuItem.Name = "m_copyCellToolStripMenuItem";
+			m_copyCellToolStripMenuItem.Size = new System.Drawing.Size(157, 22);
+			m_copyCellToolStripMenuItem.Text = "Copy Cell";
 			m_stopToolStripMenuItem.Name = "m_stopToolStripMenuItem";
 			m_stopToolStripMenuItem.Size = new System.Drawing.Size(157, 22);
 			m_stopToolStripMenuItem.Text = "Stop <replaced by resource>";

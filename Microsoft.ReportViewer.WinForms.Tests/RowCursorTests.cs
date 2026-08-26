@@ -97,4 +97,33 @@ public sealed class RowCursorTests
 
         selected.GetValue(page).Should().Be(1);
     }
+
+    [Fact]
+    public void ClipboardPayload_ProvidesPlainTextTsvCsvAndHtmlWithOptionalHeaders()
+    {
+        var rows = new[]
+        {
+            new[] { "Name", "Value" },
+            new[] { "A&B", "1\n2" }
+        };
+
+        var payload = ReportClipboardPayload.Create(rows, new ReportClipboardOptions { IncludeHeaders = true });
+
+        payload.Text.Should().Be(string.Join(Environment.NewLine, "Name\tValue", "A&B\t1 2"));
+        payload.Tsv.Should().Be(payload.Text);
+        payload.Csv.Should().Be(string.Join(Environment.NewLine, "Name,Value", "A&B,1 2"));
+        payload.Html.Should().Contain("<table>").And.Contain("A&amp;B");
+    }
+
+    [Fact]
+    public void ClipboardPayload_EmptyRowsProduceEmptyFormatsAndDiagnostics()
+    {
+        var payload = ReportClipboardPayload.Create(Array.Empty<IReadOnlyList<string>>());
+
+        payload.Text.Should().BeEmpty();
+        payload.Tsv.Should().BeEmpty();
+        payload.Csv.Should().BeEmpty();
+        payload.Html.Should().BeEmpty();
+        payload.Diagnostics.Should().Contain("No report cells selected");
+    }
 }

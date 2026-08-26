@@ -148,6 +148,18 @@ namespace Microsoft.Reporting.WinForms
             }
         }
 
+        internal bool RemoveCustomItem(ToolStripItem item)
+        {
+            if (item == null || !toolStrip1.Items.Contains(item))
+            {
+                return false;
+            }
+
+            toolStrip1.Items.Remove(item);
+            item.Dispose();
+            return true;
+        }
+
         public ReportToolBar()
         {
             InitializeComponent();

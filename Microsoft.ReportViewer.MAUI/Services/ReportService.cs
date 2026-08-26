@@ -22,9 +22,17 @@ public class ReportService
     /// <summary>
     /// Renders a report to the specified format asynchronously.
     /// </summary>
-    public Task<byte[]> RenderReportAsync(LocalReport report, string format, string? deviceInfo = null)
+    public Task<byte[]> RenderReportAsync(LocalReport report, string format, string? deviceInfo = null, CancellationToken cancellationToken = default, IProgress<double>? progress = null)
     {
-        return Task.Run(() => RenderReport(report, format, deviceInfo));
+        return Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            progress?.Report(0);
+            var result = RenderReport(report, format, deviceInfo);
+            cancellationToken.ThrowIfCancellationRequested();
+            progress?.Report(1);
+            return result;
+        }, cancellationToken);
     }
 
     /// <summary>
