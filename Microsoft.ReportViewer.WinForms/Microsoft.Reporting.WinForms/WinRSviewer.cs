@@ -93,11 +93,14 @@ namespace Microsoft.Reporting.WinForms
 			}
 		}
 
+		[DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
 		public bool EnableRowCursor
 		{
 			get => m_reportPanel.EnableRowCursor;
 			set => m_reportPanel.EnableRowCursor = value;
 		}
+
+		internal GdiPage CurrentGdiPage => m_currentPage as GdiPage;
 
 		public float ZoomCalculated => m_reportPanel.GetZoomRate();
 

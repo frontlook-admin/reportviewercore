@@ -194,6 +194,24 @@ namespace Microsoft.Reporting.WinForms
 
 			public const string PageSetupMenuItemText = "PageSetupMenuItemText";
 
+			public const string ThemeMenuItemText = "ThemeMenuItemText";
+
+			public const string ThemeButtonToolTip = "ThemeButtonToolTip";
+
+			public const string LightThemeMenuItemText = "LightThemeMenuItemText";
+
+			public const string DarkThemeMenuItemText = "DarkThemeMenuItemText";
+
+			public const string HighContrastThemeMenuItemText = "HighContrastThemeMenuItemText";
+
+			public const string ToolStripAccessibleName = "ToolStripAccessibleName";
+
+			public const string PrintDialogToolTip = "PrintDialogToolTip";
+
+			public const string OpenFileAfterExport = "OpenFileAfterExport";
+
+			public const string ReplaceExistingExportFile = "ReplaceExistingExportFile";
+
 			public const string SetReportEmbeddedResource = "SetReportEmbeddedResource";
 
 			public const string InvalidRGDIStream = "InvalidRGDIStream";
@@ -457,6 +475,24 @@ namespace Microsoft.Reporting.WinForms
 		public static string ZoomMenuItemText => Keys.GetString("ZoomMenuItemText");
 
 		public static string PageSetupMenuItemText => Keys.GetString("PageSetupMenuItemText");
+
+		public static string ThemeMenuItemText => Keys.GetString("ThemeMenuItemText");
+
+		public static string ThemeButtonToolTip => Keys.GetString("ThemeButtonToolTip");
+
+		public static string LightThemeMenuItemText => Keys.GetString("LightThemeMenuItemText");
+
+		public static string DarkThemeMenuItemText => Keys.GetString("DarkThemeMenuItemText");
+
+		public static string HighContrastThemeMenuItemText => Keys.GetString("HighContrastThemeMenuItemText");
+
+		public static string ToolStripAccessibleName => Keys.GetString("ToolStripAccessibleName");
+
+		public static string PrintDialogToolTip => Keys.GetString("PrintDialogToolTip");
+
+		public static string OpenFileAfterExport => Keys.GetString("OpenFileAfterExport");
+
+		public static string ReplaceExistingExportFile => Keys.GetString("ReplaceExistingExportFile");
 
 		public static string SetReportEmbeddedResource => Keys.GetString("SetReportEmbeddedResource");
 

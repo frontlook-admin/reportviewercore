@@ -40,7 +40,7 @@ namespace Microsoft.Reporting.WinForms
 			InitializeComponent();
 			Text = LocalizationHelper.Current.ExportDialogTitle;
 			cancelButton.Text = LocalizationHelper.Current.ExportDialogCancelButton;
-			openAfterExport.Text = "Open file after export";
+			openAfterExport.Text = ReportPreviewStrings.OpenFileAfterExport;
 			exportLabel.Text = LocalizationHelper.Current.ExportDialogStatusText;
 			m_viewerControl = viewer;
 			m_format = extension;
@@ -81,7 +81,7 @@ namespace Microsoft.Reporting.WinForms
 			openAfterExport.Name = "openAfterExport";
 			openAfterExport.Size = new Size(145, 19);
 			openAfterExport.TabIndex = 2;
-			openAfterExport.Text = "Open file after export";
+			openAfterExport.Text = ReportPreviewStrings.OpenFileAfterExport;
 			cancelButton.Location = new Point(77, 72);
 			cancelButton.Size = new Size(120, 23);
 			cancelButton.Name = "cancelButton";
@@ -173,7 +173,7 @@ namespace Microsoft.Reporting.WinForms
 					string destinationPath = PromptFileName(exportOperation.FileNameExtension);
 					if (!string.IsNullOrWhiteSpace(destinationPath))
 					{
-						if (File.Exists(destinationPath) && MessageBox.Show(this, "The file already exists. Replace it?", "Export", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+						if (File.Exists(destinationPath) && MessageBox.Show(this, ReportPreviewStrings.ReplaceExistingExportFile, ReportPreviewStrings.ExportMenuItemText.Replace("&", string.Empty), MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
 						{
 							return;
 						}

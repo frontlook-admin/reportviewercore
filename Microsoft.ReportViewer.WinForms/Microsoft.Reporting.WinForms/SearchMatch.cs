@@ -9,6 +9,8 @@ namespace Microsoft.Reporting.WinForms
 
 		private PointF m_point = PointF.Empty;
 
+		internal string Text { get; set; }
+
 		internal RTSelectionHighlight Match => m_match;
 
 		internal PointF Point

@@ -133,6 +133,15 @@ namespace Microsoft.Reporting.WinForms
 			m_tablixRowTargets.Add(new TablixRowTarget(bounds, isHeader, rowIndex, source, sourceOrder));
 		}
 
+		internal void AddTablixRowTargetWithCells(RectangleF bounds, bool isHeader, int rowIndex, string source, int sourceOrder, IReadOnlyList<string> cells)
+		{
+			if (m_tablixRowTargets == null)
+			{
+				m_tablixRowTargets = new List<TablixRowTarget>();
+			}
+			m_tablixRowTargets.Add(new TablixRowTarget(bounds, isHeader, rowIndex, source, sourceOrder, cells));
+		}
+
 		internal RenderingReport(GdiContext context)
 		{
 			RPLPageContent rPLPageContent = context.RplReport.RPLPaginatedPages[0];

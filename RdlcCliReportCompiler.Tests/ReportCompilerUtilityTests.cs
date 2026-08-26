@@ -4,12 +4,39 @@ using Microsoft.Reporting.WinForms;
 using System;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace RdlcCliReportCompiler.Tests;
 
 public sealed class ReportCompilerUtilityTests
 {
+    [Fact]
+    public void ReportCompilerRunner_KeepsParsedOptionsIsolatedBetweenInstances()
+    {
+        var first = ReportCompilerRunner.Parse(new[] { "--ReportName", "First", "--Mode", "Preview" });
+        var second = ReportCompilerRunner.Parse(new[] { "--ReportName", "Second", "--Mode", "Export" });
+
+        Assert.Equal("First", first.Options.Parameters["ReportName"]);
+        Assert.Equal("Second", second.Options.Parameters["ReportName"]);
+        Assert.Equal("Preview", first.Options.Parameters["Mode"]);
+        Assert.Equal("Export", second.Options.Parameters["Mode"]);
+    }
+
+    [Fact]
+    public async Task ReportCompilerRunner_ExecutesIndependentValidationContextsConcurrently()
+    {
+        var first = ReportCompilerRunner.Parse(new[] { "--ReportName", "First", "--Mode", "Preview" });
+        var second = ReportCompilerRunner.Parse(new[] { "--ReportName", "Second", "--Mode", "Export" });
+
+        var results = await Task.WhenAll(
+            Assert.ThrowsAsync<ArgumentException>(() => Task.Run(() => first.ValidateInputs())),
+            Assert.ThrowsAsync<ArgumentException>(() => Task.Run(() => second.ValidateInputs())));
+
+        Assert.All(results, exception => Assert.Contains("ReportPath is required", exception.Message));
+    }
+
     [Fact]
     public void ParseArguments_NormalizesLongShortAndQuotedValues()
     {
@@ -131,7 +158,10 @@ public sealed class ReportCompilerUtilityTests
     [InlineData("PDF", ExportFormat.PDF)]
     [InlineData("excel", ExportFormat.EXCEL)]
     [InlineData("EXCELOPENXML", ExportFormat.EXCELOPENXML)]
+    [InlineData("HTML4_0", ExportFormat.HTML4_0)]
     [InlineData("HTML5", ExportFormat.HTML5)]
+    [InlineData("CSV", ExportFormat.CSV)]
+    [InlineData("XML", ExportFormat.XML)]
     public void GetExportFormat_MapsSupportedFormats(string format, ExportFormat expected)
     {
         Parse("--ExportFormat", format);
@@ -142,11 +172,58 @@ public sealed class ReportCompilerUtilityTests
     [Fact]
     public void GetExportFormat_RejectsUnsupportedFormats()
     {
-        Parse("--ExportFormat", "CSV");
+        Parse("--ExportFormat", "UNSUPPORTED");
 
         var exception = Assert.Throws<ArgumentException>(() => ReportCompilerUtility.GetExportFormat());
 
         Assert.Contains("Unsupported export format", exception.Message);
+    }
+
+    [Fact]
+    public void GetAvailableExportFormats_MatchesCoreRenderingExtensions()
+    {
+        var formats = ReportCompilerUtility.GetAvailableExportFormats();
+
+        Assert.Contains("CSV", formats, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("XML", formats, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("PDF", formats, StringComparer.OrdinalIgnoreCase);
+    }
+
+
+    [Fact]
+    public void ValidateCurrentInputs_RejectsMalformedReportDefinitionBeforeRendering()
+    {
+        var reportPath = Path.Combine(Path.GetTempPath(), $"invalid-{Guid.NewGuid():N}.rdlc");
+        var dataPath = Path.Combine(Path.GetTempPath(), $"data-{Guid.NewGuid():N}.xml");
+        try
+        {
+            File.WriteAllText(reportPath, "<Report>");
+            File.WriteAllText(dataPath, "<?xml version=\"1.0\"?><DataSet />");
+            Parse(
+                "--ReportPath", reportPath,
+                "--ReportDataSource", dataPath,
+                "--ReportName", "Invalid",
+                "--Mode", "Export",
+                "--ExportFormat", "PDF",
+                "--ExportPath", Path.Combine(Path.GetTempPath(), "not-created.pdf"));
+
+            Assert.ThrowsAny<Exception>(() => ReportCompilerUtility.ValidateCurrentInputs());
+        }
+        finally
+        {
+            File.Delete(reportPath);
+            File.Delete(dataPath);
+        }
+    }
+
+    [Fact]
+    public void ParseArguments_SupportsStructuredProgressAndCancellation()
+    {
+        var parameters = Parse("--Progress", "true", "--Mode", "Preview");
+
+        Assert.Equal("true", parameters["Progress"]);
+        Assert.Throws<OperationCanceledException>(() =>
+            ReportCompilerUtility.ThrowIfCancellationRequested(new CancellationToken(canceled: true)));
     }
 
     [Theory]

@@ -15,6 +15,7 @@ using System.Drawing.Printing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using CancellationToken = System.Threading.CancellationToken;
@@ -25,6 +26,9 @@ using System.Windows.Forms;
 
 namespace Microsoft.Reporting.WinForms
 {
+    [ToolboxItem(true)]
+    [DefaultProperty(nameof(LocalReport))]
+    [DefaultEvent(nameof(ReportError))]
     [Designer("Microsoft.Reporting.WinForms.ReportViewerDesigner, Microsoft.ReportViewer.Design, Version=15.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91", typeof(IDesigner))]
     [Docking(DockingBehavior.Ask)]
     [SRDescription("ReportViewerDescription")]
@@ -176,6 +180,10 @@ namespace Microsoft.Reporting.WinForms
         private bool m_preferencesLoaded;
 
         private bool m_preferencePersistenceSuppressed;
+
+        private bool m_autoSaveReportPreferences;
+
+        private string m_reportPreferenceKey;
 
         private ToolStripRenderer m_toolStripRenderer = new ModernReportToolStripRenderer();
 
@@ -1023,6 +1031,22 @@ namespace Microsoft.Reporting.WinForms
         public string SearchText => m_searchState?.Text;
 
         [Browsable(false)]
+        public IReadOnlyList<SearchMatchInfo> SearchMatches
+        {
+            get
+            {
+                if (m_reportHierarchy.Count == 0 || CurrentReport.GdiRenderer?.Context?.SearchMatches == null)
+                {
+                    return Array.Empty<SearchMatchInfo>();
+                }
+
+                return CurrentReport.GdiRenderer.Context.SearchMatches
+                    .Select((match, index) => new SearchMatchInfo(match.Text, CurrentPage, index, match.Point))
+                    .ToArray();
+            }
+        }
+
+        [Browsable(false)]
         public Exception LastError => m_lastError;
 
         [Browsable(false)]
@@ -1133,10 +1157,30 @@ namespace Microsoft.Reporting.WinForms
 
         public event EventHandler LiveReloaded;
 
+        public event EventHandler<ReportViewerRowSelectionChangedEventArgs> RowSelectionChanged;
+
         public event EventHandler<ReportViewerLiveReloadErrorEventArgs> LiveReloadError;
 
         [SRDescription("SearchEventDesc")]
         public event SearchEventHandler Search;
+
+        public event EventHandler<SearchMatchChangedEventArgs> SearchMatchChanged;
+
+        [Browsable(false)]
+        [DefaultValue(false)]
+        public bool AutoSaveReportPreferences
+        {
+            get => m_autoSaveReportPreferences;
+            set => m_autoSaveReportPreferences = value;
+        }
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public string ReportPreferenceKey
+        {
+            get => m_reportPreferenceKey;
+            set => m_reportPreferenceKey = value;
+        }
 
         [SRDescription("ErrorEventDesc")]
         public event ReportErrorEventHandler ReportError;
@@ -2451,6 +2495,7 @@ namespace Microsoft.Reporting.WinForms
                 {
                     SetViewForCurrentPage(UIState.ProcessingSuccess, new PostRenderArgs(ActionType.Search, searchString, winRSviewer.ReportPanelAutoScrollPosition));
                 }
+                RaiseSearchMatchChanged();
             }
             return num;
         }
@@ -2480,6 +2525,7 @@ namespace Microsoft.Reporting.WinForms
             {
                 SetViewForCurrentPage(UIState.ProcessingSuccess, new PostRenderArgs(isDifferentReport: false, isPartialRendering: false, winRSviewer.ReportPanelAutoScrollPosition));
                 winRSviewer.SetFocusPointMm(CurrentReport.GdiRenderer.Context.SearchMatches[CurrentReport.GdiRenderer.Context.SearchMatchIndex].Point, WinRSviewer.FocusMode.AvoidScrolling);
+                RaiseSearchMatchChanged();
                 return CurrentPage;
             }
             int defaultEndPageForStartPage = GetDefaultEndPageForStartPage(m_searchState.StartPage);
@@ -2626,7 +2672,8 @@ namespace Microsoft.Reporting.WinForms
                 ShowPrintButton = ShowPrintButton,
                 ShowExportButton = ShowExportButton,
                 ShowZoomControl = ShowZoomControl,
-                ShowFindControls = ShowFindControls
+                ShowFindControls = ShowFindControls,
+                ParameterPresets = CloneParameterPresets(ReadPersistedParameterPresets())
             };
         }
 
@@ -2672,6 +2719,7 @@ namespace Microsoft.Reporting.WinForms
                 ShowExportButton = preferences.ShowExportButton;
                 ShowZoomControl = preferences.ShowZoomControl;
                 ShowFindControls = preferences.ShowFindControls;
+                preferences.ParameterPresets = CloneParameterPresets(preferences.ParameterPresets);
             }
             finally
             {
@@ -2693,6 +2741,121 @@ namespace Microsoft.Reporting.WinForms
 
             ApplyPreferences(ReportViewerPreferences.Read(PreferencesFilePath));
             return true;
+        }
+
+        /// <summary>Saves a safe, report-scoped parameter preset.</summary>
+        public void SaveParameterPreset(string reportKey, string presetName, IEnumerable<ReportParameter> parameters)
+        {
+            if (string.IsNullOrWhiteSpace(reportKey))
+            {
+                throw new ArgumentException("A report preference key is required.", nameof(reportKey));
+            }
+
+            var preset = new ReportViewerParameterPreset(
+                presetName,
+                (parameters ?? throw new ArgumentNullException(nameof(parameters)))
+                    .Where(parameter => parameter != null)
+                    .ToDictionary(parameter => parameter.Name, parameter => parameter.Values.Cast<string>().ToArray(), StringComparer.OrdinalIgnoreCase));
+            var preferences = File.Exists(PreferencesFilePath) ? ReportViewerPreferences.Read(PreferencesFilePath) : CapturePreferences();
+            if (!preferences.ParameterPresets.TryGetValue(reportKey, out var reportPresets))
+            {
+                reportPresets = new Dictionary<string, ReportViewerParameterPreset>(StringComparer.OrdinalIgnoreCase);
+                preferences.ParameterPresets[reportKey] = reportPresets;
+            }
+
+            reportPresets[preset.Name] = preset;
+            WriteTextFileAtomically(PreferencesFilePath, preferences.ToJson());
+        }
+
+        /// <summary>Returns a detached copy of a report-scoped preset, if present.</summary>
+        public ReportViewerParameterPreset GetParameterPreset(string reportKey, string presetName)
+        {
+            if (string.IsNullOrWhiteSpace(reportKey) || string.IsNullOrWhiteSpace(presetName) || !File.Exists(PreferencesFilePath))
+            {
+                return null;
+            }
+
+            var preferences = ReportViewerPreferences.Read(PreferencesFilePath);
+            return preferences.ParameterPresets.TryGetValue(reportKey, out var reportPresets) && reportPresets.TryGetValue(presetName, out var preset)
+                ? ReportViewerParameterPreset.FromJson(preset.ToJson())
+                : null;
+        }
+
+        /// <summary>Applies a stored preset to the current report execution.</summary>
+        public bool ApplyParameterPreset(string reportKey, string presetName)
+        {
+            var preset = GetParameterPreset(reportKey, presetName);
+            if (preset == null)
+            {
+                return false;
+            }
+
+            Report.SetParameters(preset.Values.Select(parameter => new ReportParameter(parameter.Key, parameter.Value)));
+            return true;
+        }
+
+        /// <summary>Removes a report-scoped preset without affecting other reports.</summary>
+        public bool ResetParameterPreset(string reportKey, string presetName)
+        {
+            if (string.IsNullOrWhiteSpace(reportKey) || string.IsNullOrWhiteSpace(presetName) || !File.Exists(PreferencesFilePath))
+            {
+                return false;
+            }
+
+            var preferences = ReportViewerPreferences.Read(PreferencesFilePath);
+            if (!preferences.ParameterPresets.TryGetValue(reportKey, out var reportPresets) || !reportPresets.Remove(presetName))
+            {
+                return false;
+            }
+
+            if (reportPresets.Count == 0)
+            {
+                preferences.ParameterPresets.Remove(reportKey);
+            }
+            WriteTextFileAtomically(PreferencesFilePath, preferences.ToJson());
+            return true;
+        }
+
+        private Dictionary<string, Dictionary<string, ReportViewerParameterPreset>> ReadPersistedParameterPresets()
+        {
+            if (!File.Exists(PreferencesFilePath))
+            {
+                return new Dictionary<string, Dictionary<string, ReportViewerParameterPreset>>(StringComparer.OrdinalIgnoreCase);
+            }
+
+            try
+            {
+                return ReportViewerPreferences.Read(PreferencesFilePath).ParameterPresets;
+            }
+            catch (Exception exception)
+            {
+                Debug.WriteLine($"ReportViewer.ReadPersistedParameterPresets: {exception.GetType().Name} - {exception.Message}");
+                return new Dictionary<string, Dictionary<string, ReportViewerParameterPreset>>(StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
+        private static Dictionary<string, Dictionary<string, ReportViewerParameterPreset>> CloneParameterPresets(
+            IDictionary<string, Dictionary<string, ReportViewerParameterPreset>> presets)
+        {
+            var result = new Dictionary<string, Dictionary<string, ReportViewerParameterPreset>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var report in presets ?? new Dictionary<string, Dictionary<string, ReportViewerParameterPreset>>())
+            {
+                var reportPresets = new Dictionary<string, ReportViewerParameterPreset>(StringComparer.OrdinalIgnoreCase);
+                foreach (var preset in report.Value ?? new Dictionary<string, ReportViewerParameterPreset>())
+                {
+                    if (preset.Value != null)
+                    {
+                        reportPresets[preset.Key] = ReportViewerParameterPreset.FromJson(preset.Value.ToJson());
+                    }
+                }
+
+                if (reportPresets.Count > 0)
+                {
+                    result[report.Key] = reportPresets;
+                }
+            }
+
+            return result;
         }
 
         private ReportViewerThemeKind GetThemeKind()
@@ -4072,11 +4235,36 @@ namespace Microsoft.Reporting.WinForms
             try
             {
                 SavePreferences();
+                if (m_autoSaveReportPreferences && !string.IsNullOrWhiteSpace(m_reportPreferenceKey))
+                {
+                    SaveReportPreferences(m_reportPreferenceKey);
+                }
             }
             catch (Exception exception)
             {
                 Debug.WriteLine($"ReportViewer.SavePreferences: {exception.GetType().Name} - {exception.Message}");
             }
+        }
+
+        public void SaveReportPreferences(string reportKey)
+        {
+            if (string.IsNullOrWhiteSpace(reportKey))
+            {
+                throw new ArgumentException("A report preference key is required.", nameof(reportKey));
+            }
+
+            string directory = Path.GetDirectoryName(PreferencesFilePath);
+            string safeKey = string.Concat(reportKey.Select(character => char.IsLetterOrDigit(character) || character == '-' || character == '_' ? character : '_'));
+            string path = Path.Combine(directory ?? AppContext.BaseDirectory, $"ViewerPreferences.{safeKey}.json");
+            WriteTextFileAtomically(path, CapturePreferences().ToJson());
+        }
+
+        private void RaiseSearchMatchChanged()
+        {
+            IReadOnlyList<SearchMatchInfo> matches = SearchMatches;
+            int index = CurrentReport.GdiRenderer?.Context?.SearchMatchIndex ?? -1;
+            SearchMatchInfo match = index >= 0 && index < matches.Count ? matches[index] : null;
+            SearchMatchChanged?.Invoke(this, new SearchMatchChangedEventArgs(match, matches.Count));
         }
 
         private void ApplySplitterResources(bool allResources)
@@ -4318,26 +4506,49 @@ namespace Microsoft.Reporting.WinForms
                 throw new ArgumentException("The export path must include a file name.", nameof(filePath));
             }
 
-            Directory.CreateDirectory(directory);
-            string temporaryPath = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            string stagingDirectory = Path.Combine(directory, $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.export");
+            Directory.CreateDirectory(stagingDirectory);
+            var operation = new AsyncExportOperation(Report, PageCountMode.Actual, extension.Name, deviceInfo, allowInternalRenderers: false, null);
+            var secondaryFiles = new List<ReportExportSecondaryFile>();
             try
             {
-                byte[] bytes = await Report.RenderAsync(
-                    extension.Name,
-                    deviceInfo,
-                    PageCountMode.Actual,
-                    cancellationToken,
-                    progress);
-                cancellationToken.ThrowIfCancellationRequested();
-                if (bytes == null || bytes.Length == 0)
+                using (cancellationToken.Register(() => operation.Abort()))
                 {
-                    throw new IOException("The export produced an empty file.");
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await Task.Run(operation.BeginAsyncExecution, CancellationToken.None).ConfigureAwait(false);
+                    cancellationToken.ThrowIfCancellationRequested();
                 }
 
-                await File.WriteAllBytesAsync(temporaryPath, bytes, cancellationToken);
+                string stagedMainPath = Path.Combine(stagingDirectory, Path.GetFileName(fullPath));
+                CopyExportFile(operation.OutputPath, stagedMainPath, cancellationToken);
+                foreach (ExportedStream secondary in operation.SecondaryStreams)
+                {
+                    if (secondary.IsInternal)
+                    {
+                        continue;
+                    }
+
+                    string relativePath = GetSafeExportRelativePath(secondary.Name, secondary.Path);
+                    string destinationPath = GetExportPathUnderDirectory(directory, relativePath);
+                    string stagedPath = GetExportPathUnderDirectory(stagingDirectory, relativePath);
+                    CopyExportFile(secondary.Path, stagedPath, cancellationToken);
+                    secondaryFiles.Add(new ReportExportSecondaryFile(
+                        secondary.Name,
+                        destinationPath,
+                        new FileInfo(secondary.Path).Length,
+                        secondary.IsInternal));
+                }
+
                 cancellationToken.ThrowIfCancellationRequested();
-                File.Move(temporaryPath, fullPath, overwrite: true);
-                return new ReportExportResult(extension.Name, fullPath, bytes.LongLength);
+                foreach (ReportExportSecondaryFile secondary in secondaryFiles)
+                {
+                    string relativePath = GetSafeExportRelativePath(secondary.Name, secondary.FilePath);
+                    Directory.CreateDirectory(Path.GetDirectoryName(secondary.FilePath));
+                    File.Move(GetExportPathUnderDirectory(stagingDirectory, relativePath), secondary.FilePath, overwrite: true);
+                }
+
+                File.Move(stagedMainPath, fullPath, overwrite: true);
+                return new ReportExportResult(extension.Name, fullPath, new FileInfo(fullPath).Length, secondaryFiles);
             }
             catch (Exception exception)
             {
@@ -4347,10 +4558,59 @@ namespace Microsoft.Reporting.WinForms
             }
             finally
             {
-                if (File.Exists(temporaryPath))
-                {
-                    File.Delete(temporaryPath);
-                }
+                operation.Cleanup();
+                TryDeleteDirectory(stagingDirectory);
+            }
+        }
+
+        private static void CopyExportFile(string sourcePath, string destinationPath, CancellationToken cancellationToken)
+        {
+            string destinationDirectory = Path.GetDirectoryName(destinationPath);
+            Directory.CreateDirectory(destinationDirectory);
+            using (FileStream source = File.OpenRead(sourcePath))
+            using (FileStream destination = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, 64 * 1024, FileOptions.SequentialScan))
+            {
+                source.CopyTo(destination, 64 * 1024);
+                cancellationToken.ThrowIfCancellationRequested();
+                destination.Flush(flushToDisk: true);
+            }
+        }
+
+        private static string GetSafeExportRelativePath(string streamName, string fallbackPath)
+        {
+            string path = string.IsNullOrWhiteSpace(streamName) ? Path.GetFileName(fallbackPath) : streamName.Trim();
+            path = path.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+            if (Path.IsPathRooted(path))
+            {
+                throw new InvalidOperationException($"The export contains an unsafe secondary stream path '{streamName}'.");
+            }
+
+            string[] segments = path.Split(new[] { Path.DirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length == 0 || Array.Exists(segments, segment => segment == ".." || segment.IndexOf(Path.VolumeSeparatorChar) >= 0))
+            {
+                throw new InvalidOperationException($"The export contains an unsafe secondary stream path '{streamName}'.");
+            }
+
+            return Path.Combine(segments);
+        }
+
+        private static string GetExportPathUnderDirectory(string directory, string relativePath)
+        {
+            string root = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            string fullPath = Path.GetFullPath(Path.Combine(directory, relativePath));
+            if (!fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException($"The export contains an unsafe secondary stream path '{relativePath}'.");
+            }
+
+            return fullPath;
+        }
+
+        private static void TryDeleteDirectory(string directory)
+        {
+            if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory))
+            {
+                try { Directory.Delete(directory, recursive: true); } catch (IOException) { }
             }
         }
 
@@ -4463,6 +4723,78 @@ namespace Microsoft.Reporting.WinForms
             winRSviewer.SetZoom();
             reportToolBar.SetZoom();
             UpdateUIState(m_lastUIState);
+        }
+
+        internal void NotifyRowSelectionChanged(GdiPage page)
+        {
+            TablixRowTarget target = page?.SelectedRowTarget;
+            if (target == null)
+            {
+                return;
+            }
+
+            ReportViewerRowSelection selection = new ReportViewerRowSelection(
+                CurrentPage,
+                target.RowIndex,
+                target.IsHeader,
+                target.Source,
+                target.SourceOrder,
+                target.Cells);
+            RowSelectionChanged?.Invoke(this, new ReportViewerRowSelectionChangedEventArgs(selection));
+        }
+
+        public bool CopySelectedCell(int cellIndex = 0)
+        {
+            ReportViewerRowSelection selection = GetSelectedRowSelection();
+            return selection != null && cellIndex >= 0 && cellIndex < selection.Cells.Count
+                && TrySetClipboardText(selection.Cells[cellIndex]);
+        }
+
+        public bool CopySelectedRow()
+        {
+            ReportViewerRowSelection selection = GetSelectedRowSelection();
+            return selection != null && TrySetClipboardText(string.Join("\t", selection.Cells));
+        }
+
+        public bool CopySelectedTable()
+        {
+            GdiPage page = winRSviewer.CurrentGdiPage;
+            ReportViewerRowSelection selection = GetSelectedRowSelection();
+            if (page == null || selection == null)
+            {
+                return false;
+            }
+
+            string table = string.Join(Environment.NewLine, page.RowTargets
+                .Where(target => string.Equals(target.Source, selection.Source, StringComparison.Ordinal))
+                .Select(target => string.Join("\t", target.Cells)));
+            return TrySetClipboardText(table);
+        }
+
+        private ReportViewerRowSelection GetSelectedRowSelection()
+        {
+            GdiPage page = winRSviewer.CurrentGdiPage;
+            TablixRowTarget target = page?.SelectedRowTarget;
+            return target == null
+                ? null
+                : new ReportViewerRowSelection(CurrentPage, target.RowIndex, target.IsHeader, target.Source, target.SourceOrder, target.Cells);
+        }
+
+        private static bool TrySetClipboardText(string text)
+        {
+            try
+            {
+                Clipboard.SetText(text ?? string.Empty);
+                return true;
+            }
+            catch (ExternalException)
+            {
+                return false;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
         }
 
         internal void FireAnAction(Action action, bool shiftKeyDown)

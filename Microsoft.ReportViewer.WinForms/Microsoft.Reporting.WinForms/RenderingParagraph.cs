@@ -352,6 +352,7 @@ namespace Microsoft.Reporting.WinForms
 				textBoxContext2.TextRunIndex = num2;
 				textBoxContext2.TextRunCharacterIndex = num + text2.Length - num3;
 				SearchMatch searchMatch = new SearchMatch(new RTSelectionHighlight(textBoxContext, textBoxContext2, SystemColors.Highlight));
+				searchMatch.Text = text2;
 				searchMatch.Point = new PointF(TextPosition.X, TextPosition.Y);
 				m_searchResults.Add(searchMatch);
 				context.SearchMatches.Add(searchMatch);

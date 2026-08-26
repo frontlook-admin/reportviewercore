@@ -266,6 +266,58 @@ namespace Microsoft.Reporting.WinForms
 			return Render(format, deviceInfo, PageCountMode.Estimate, out mimeType, out encoding, out fileNameExtension, out streams, out warnings);
 		}
 
+        public Task<ReportExportResult> RenderToStreamAsync(
+            Stream destination,
+            string format,
+            string deviceInfo = null,
+            CancellationToken cancellationToken = default,
+            IProgress<ReportRenderProgress> progress = null)
+        {
+            if (destination == null)
+            {
+                throw new ArgumentNullException(nameof(destination));
+            }
+            if (!destination.CanWrite)
+            {
+                throw new ArgumentException("The destination stream must be writable.", nameof(destination));
+            }
+            if (string.IsNullOrWhiteSpace(format))
+            {
+                throw new ArgumentException("A render format is required.", nameof(format));
+            }
+
+            return RenderToStreamAsyncCore(destination, format, deviceInfo, cancellationToken);
+        }
+
+        private async Task<ReportExportResult> RenderToStreamAsyncCore(
+            Stream destination,
+            string format,
+            string deviceInfo,
+            CancellationToken cancellationToken)
+        {
+            var operation = new AsyncExportOperation(this, PageCountMode.Actual, format, deviceInfo ?? string.Empty, allowInternalRenderers: false, null);
+            try
+            {
+                using (cancellationToken.Register(() => operation.Abort()))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await Task.Run(operation.BeginAsyncExecution, CancellationToken.None).ConfigureAwait(false);
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+
+                using (FileStream source = File.OpenRead(operation.OutputPath))
+                {
+                    await source.CopyToAsync(destination, 64 * 1024, cancellationToken).ConfigureAwait(false);
+                }
+
+                return new ReportExportResult(format, null, new FileInfo(operation.OutputPath).Length);
+            }
+            finally
+            {
+                operation.Cleanup();
+            }
+        }
+
 		public DocumentMapNode GetDocumentMap()
 		{
 			return GetDocumentMap(DisplayNameForUse);

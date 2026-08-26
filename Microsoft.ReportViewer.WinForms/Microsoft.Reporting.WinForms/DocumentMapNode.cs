@@ -26,6 +26,30 @@ namespace Microsoft.Reporting.WinForms
 
 		public IList<DocumentMapNode> Children => m_children;
 
+		public DocumentMapNode Filter(string text)
+		{
+			if (string.IsNullOrWhiteSpace(text))
+			{
+				return this;
+			}
+
+			List<DocumentMapNode> matches = new List<DocumentMapNode>();
+			foreach (DocumentMapNode child in m_children)
+			{
+				DocumentMapNode filtered = child.Filter(text);
+				if (filtered != null)
+				{
+					matches.Add(filtered);
+				}
+			}
+
+			if (m_label.IndexOf(text, System.StringComparison.OrdinalIgnoreCase) >= 0 || matches.Count > 0)
+			{
+				return new DocumentMapNode(m_label, m_id, matches.ToArray());
+			}
+			return null;
+		}
+
 		internal DocumentMapNode(string label, string id, DocumentMapNode[] children)
 		{
 			m_label = label;

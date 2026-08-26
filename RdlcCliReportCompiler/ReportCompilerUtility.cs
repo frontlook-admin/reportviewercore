@@ -39,6 +39,7 @@ namespace CliReportCompiler
         private const string ValidateOption = "Validate";
         private const string OpenExportOption = "OpenExport";
         private const string VersionOption = "Version";
+        private const string ProgressOption = "Progress";
 
         private const string UsageText = @"Usage: CliReportCompiler.exe options
 Options:
@@ -46,7 +47,7 @@ Options:
   --ReportDataSource|-ds    Path to the data source file (should be in xml along with xml schema in single file).
   --ReportName|-rn          Name of the report.
   --Mode|-m                 Operation mode: Preview, Print, PrintSetup, PrintSettings, or Export.
-  --ExportFormat|-ef        Export format: PDF, EXCEL, EXCELOPENXML, WORD, WORDOPENXML, IMAGE, HTML4_0, HTML5, MHTML
+  --ExportFormat|-ef        Export format exposed by the core renderer (for example PDF, CSV, XML, EXCELOPENXML, HTML5).
   --ExportPath|-ep          Path where the exported file will be saved.
   --AttachSubReport|-asr    Attach sub reports using 'key1=value1,key2=value2'.
   --PrintSetupFile|-psf     Path to the print setup file (JSON). Defaults to applicationPath/RdlcPrintSetting/ReportName.json.
@@ -59,6 +60,7 @@ Options:
   --Validate|-val           Validate report, data, print setup, and export inputs without rendering.
   --OpenExport|-oe          Open the exported file with the default Windows application.
   --ListFormats|-formats    List supported export formats and exit.
+  --Progress                Write structured progress events to stdout: true or false.
   --Version|--ver|-ver      Display compiler and ReportViewer versions.
   --Test|-t                 Test message (for debugging purposes).
   --Demo|-d                 Run a demo of the ReportViewer.
@@ -91,6 +93,7 @@ Example:
                 [ValidateOption] = "val",
                 [OpenExportOption] = "oe",
                 [ListFormatsOption] = "formats",
+                [ProgressOption] = "progress",
                 ["Test"] = "t"
             };
 
@@ -105,11 +108,20 @@ Example:
             "Mode",
         };
 
-        private static readonly Dictionary<string, string> GetParameters =
-            new(StringComparer.OrdinalIgnoreCase);
+        internal sealed class ExecutionState
+        {
+            internal Dictionary<string, string> Parameters { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-        private static readonly Dictionary<string, string> GetSubReports =
-            new(StringComparer.OrdinalIgnoreCase);
+            internal Dictionary<string, string> SubReports { get; } = new(StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static readonly AsyncLocal<ExecutionState> CurrentState = new();
+
+        private static Dictionary<string, string> GetParameters =>
+            (CurrentState.Value ??= new ExecutionState()).Parameters;
+
+        private static Dictionary<string, string> GetSubReports =>
+            (CurrentState.Value ??= new ExecutionState()).SubReports;
 
         private static readonly object ConsoleSync = new();
 
@@ -235,6 +247,43 @@ Example:
         }
 
         /// <summary>
+        /// Executes a report with an immutable options snapshot, without changing the
+        /// compatibility facade's caller state.
+        /// </summary>
+        public static void Execute(ReportCompilerOptions options, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(options);
+            var previousState = CurrentState.Value;
+            CurrentState.Value = options.ToExecutionState();
+            try
+            {
+                Execute(cancellationToken);
+            }
+            finally
+            {
+                CurrentState.Value = previousState;
+            }
+        }
+
+        /// <summary>
+        /// Validates an immutable options snapshot in its own execution context.
+        /// </summary>
+        public static void ValidateInputs(ReportCompilerOptions options, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(options);
+            var previousState = CurrentState.Value;
+            CurrentState.Value = options.ToExecutionState();
+            try
+            {
+                ValidateCurrentInputs(cancellationToken);
+            }
+            finally
+            {
+                CurrentState.Value = previousState;
+            }
+        }
+
+        /// <summary>
         /// Interactive console-based argument parser.
         /// </summary>
         public static void ParseArgumentsInteractively()
@@ -285,7 +334,18 @@ Example:
 
         public static void ShowFormats()
         {
-            Console.WriteLine("Supported export formats: PDF, EXCEL, EXCELOPENXML, WORD, WORDOPENXML, IMAGE, HTML4_0, HTML5, MHTML");
+            Console.WriteLine($"Supported export formats: {string.Join(", ", GetAvailableExportFormats())}");
+        }
+
+        public static IReadOnlyList<string> GetAvailableExportFormats()
+        {
+            using var report = new LocalReport();
+            return report.ListRenderingExtensions()
+                .Where(extension => extension.Visible)
+                .Select(extension => extension.Name)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
         }
 
         /// <summary>
@@ -333,12 +393,19 @@ Example:
         /// </summary>
         public static void Execute()
         {
+            Execute(CancellationToken.None);
+        }
+
+        public static void Execute(CancellationToken cancellationToken)
+        {
             var stopwatch = Stopwatch.StartNew();
             var reportPath = GetOptionalParameter("ReportPath");
             var dataSourcePath = GetOptionalParameter("ReportDataSource");
             var reportName = GetOptionalParameter("ReportName");
             var mode = GetOptionalParameter("Mode");
+            ThrowIfCancellationRequested(cancellationToken);
             LogInfo("execution_started", reportPath);
+            WriteProgress("execution_started", reportPath);
 
             if (GetParameters.TryGetValue("Test", out var testValue) && !string.IsNullOrEmpty(testValue))
             {
@@ -364,13 +431,15 @@ Example:
             {
                 if (GetBooleanParameter(ValidateOption, defaultValue: false))
                 {
-                    ValidateReportInputs(reportPath, dataSourcePath, reportName, mode);
+                    ValidateReportInputs(reportPath, dataSourcePath, reportName, mode, cancellationToken);
                     LogInfo("validation_succeeded", reportPath, stopwatch.Elapsed);
+                    WriteProgress("validation_succeeded", reportPath);
                     return;
                 }
 
-                ProcessReport(GetWaitForViewer(), GetErrorLoggingEnabled());
+                ProcessReport(GetWaitForViewer(), GetErrorLoggingEnabled(), cancellationToken);
                 LogInfo("execution_succeeded", reportPath, stopwatch.Elapsed);
+                WriteProgress("execution_succeeded", reportPath);
             }
             catch
             {
@@ -433,8 +502,9 @@ Example:
             ProcessReport(GetWaitForViewer(), GetErrorLoggingEnabled());
         }
 
-        private static void ProcessReport(bool waitForViewer, bool enableErrorLogging)
+        private static void ProcessReport(bool waitForViewer, bool enableErrorLogging, CancellationToken cancellationToken = default)
         {
+            ThrowIfCancellationRequested(cancellationToken);
             var reportPath = GetRequiredParameter("ReportPath");
             var dataSourcePath = GetRequiredParameter("ReportDataSource");
             var reportName = GetRequiredParameter("ReportName");
@@ -450,6 +520,7 @@ Example:
 
             ValidateFilesExist(reportPath, dataSourcePath);
             var dataSet = LoadDataset(dataSourcePath);
+            ThrowIfCancellationRequested(cancellationToken);
 
             var report = new FL_IRdlcReport
             {
@@ -482,7 +553,7 @@ Example:
                         PrintReport(report);
                         break;
                     case ExportMode:
-                        ExportReport(report);
+                        ExportReport(report, cancellationToken);
                         break;
                     default:
                         throw new ArgumentException($"Invalid mode: {mode}. Supported modes: Preview, Print, PrintSetup, PrintSettings, Export");
@@ -517,14 +588,16 @@ Example:
             }
         }
 
-        private static void ValidateReportInputs(string reportPath, string dataSourcePath, string reportName, string mode)
+        public static void ValidateCurrentInputs(CancellationToken cancellationToken = default)
         {
+            ValidateReportInputs(GetRequiredParameter("ReportPath"), GetRequiredParameter("ReportDataSource"), GetRequiredParameter("ReportName"), GetRequiredParameter("Mode"), cancellationToken);
+        }
+
+        private static void ValidateReportInputs(string reportPath, string dataSourcePath, string reportName, string mode, CancellationToken cancellationToken = default)
+        {
+            ThrowIfCancellationRequested(cancellationToken);
             var normalizedMode = mode.Trim().ToUpperInvariant();
-            if (normalizedMode != PreviewMode
-                && normalizedMode != PrintMode
-                && normalizedMode != PrintSetupMode
-                && normalizedMode != PrintSettingsMode
-                && normalizedMode != ExportMode)
+            if (normalizedMode != PreviewMode && normalizedMode != PrintMode && normalizedMode != PrintSetupMode && normalizedMode != PrintSettingsMode && normalizedMode != ExportMode)
             {
                 throw new ArgumentException($"Invalid mode: {mode}. Supported modes: Preview, Print, PrintSetup, PrintSettings, Export");
             }
@@ -537,8 +610,13 @@ Example:
             }
 
             var printSetupFile = GetOptionalParameter("PrintSetupFile");
-            if (!string.IsNullOrWhiteSpace(printSetupFile) && File.Exists(printSetupFile))
+            if (!string.IsNullOrWhiteSpace(printSetupFile))
             {
+                if (!File.Exists(printSetupFile))
+                {
+                    throw new FileNotFoundException("Print setup file not found", printSetupFile);
+                }
+
                 var printSettings = File.ReadAllText(printSetupFile).FL_CastToClass<CustomPrintDialog>();
                 if (printSettings?.CPageSettings == null && printSettings?.PaperSize == null)
                 {
@@ -546,9 +624,73 @@ Example:
                 }
             }
 
+            using var localReport = new LocalReport();
+            using (var reportStream = File.OpenRead(reportPath))
+            {
+                localReport.LoadReportDefinition(reportStream);
+            }
+
+            foreach (var dataSourceName in localReport.GetDataSourceNames())
+            {
+                if (!dataSet.Tables.Contains(dataSourceName))
+                {
+                    throw new InvalidDataException($"Missing report data source: {dataSourceName}");
+                }
+            }
+
+            foreach (DataTable table in dataSet.Tables)
+            {
+                localReport.DataSources.Add(new ReportDataSource(table.TableName, table));
+            }
+
+            var parameterValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (dataSet.Tables.Contains(ParametersTableName))
+            {
+                var parameterTable = dataSet.Tables[ParametersTableName];
+                if (!parameterTable.Columns.Contains("Name") || !parameterTable.Columns.Contains("Value"))
+                {
+                    throw new InvalidDataException($"The {ParametersTableName} table must contain Name and Value columns.");
+                }
+
+                foreach (DataRow row in parameterTable.Rows)
+                {
+                    var name = row["Name"]?.ToString();
+                    if (!string.IsNullOrWhiteSpace(name))
+                    {
+                        parameterValues[name] = row["Value"]?.ToString() ?? string.Empty;
+                    }
+                }
+            }
+
+            var missingParameters = localReport.GetParameters()
+                .Where(parameter => !parameterValues.ContainsKey(parameter.Name))
+                .Select(parameter => parameter.Name)
+                .ToArray();
+            if (missingParameters.Length > 0)
+            {
+                throw new InvalidDataException($"Missing report parameters: {string.Join(", ", missingParameters)}");
+            }
+
+            if (parameterValues.Count > 0)
+            {
+                localReport.SetParameters(localReport.GetParameters().Select(parameter => new ReportParameter(parameter.Name, parameterValues[parameter.Name])));
+            }
+
+            foreach (var subReport in GetSubReports)
+            {
+                using var subReportStream = File.OpenRead(subReport.Value);
+                localReport.LoadSubreportDefinition(subReport.Key, subReportStream);
+            }
+
+            var availableFormats = localReport.ListRenderingExtensions().Select(extension => extension.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
             if (normalizedMode == ExportMode)
             {
-                GetExportFormat();
+                var requestedFormat = GetRequiredParameter("ExportFormat");
+                if (!availableFormats.Contains(requestedFormat))
+                {
+                    throw new ArgumentException($"Unsupported export format: {requestedFormat}");
+                }
+
                 var exportPath = GetRequiredParameter("ExportPath");
                 if (string.IsNullOrWhiteSpace(Path.GetFileName(exportPath)))
                 {
@@ -556,11 +698,9 @@ Example:
                 }
             }
 
-            LogInfo("inputs_validated", reportPath, null, new
-            {
-                ReportName = reportName,
-                Tables = dataSet.Tables.Count
-            });
+            ThrowIfCancellationRequested(cancellationToken);
+            _ = localReport.GetTotalPages(out _);
+            LogInfo("inputs_validated", reportPath, null, new { ReportName = reportName, Tables = dataSet.Tables.Count });
         }
 
         /// <summary>
@@ -713,6 +853,8 @@ Example:
                 "HTML4_0" => ExportFormat.HTML4_0,
                 "HTML5" => ExportFormat.HTML5,
                 "MHTML" => ExportFormat.MHTML,
+                "CSV" => ExportFormat.CSV,
+                "XML" => ExportFormat.XML,
                 _ => throw new ArgumentException($"Unsupported export format: {format}")
             };
         }
@@ -720,8 +862,9 @@ Example:
         /// <summary>
         /// Exports a report to the configured path and format.
         /// </summary>
-        public static void ExportReport(FL_IRdlcReport report)
+        public static void ExportReport(FL_IRdlcReport report, CancellationToken cancellationToken = default)
         {
+            ThrowIfCancellationRequested(cancellationToken);
             var requestedExportPath = GetRequiredParameter("ExportPath");
             var exportPath = Path.GetFullPath(requestedExportPath);
             report.ExportFormat = GetExportFormat();
@@ -741,6 +884,7 @@ Example:
             {
                 LogInfo("export_started", exportPath, null, new { Format = report.ExportFormat.ToString() });
                 var exportedBytes = RenderExport(report);
+                ThrowIfCancellationRequested(cancellationToken);
                 File.WriteAllBytes(temporaryExportPath, exportedBytes);
 
                 if (!File.Exists(temporaryExportPath))
@@ -783,9 +927,15 @@ Example:
                 ? null
                 : ReportViewer.CreateExportDeviceInfo(report.PrintSettings);
 
+            var rendererFormat = GetRendererFormatName(report.ExportFormat);
             return string.IsNullOrWhiteSpace(deviceInfo)
-                ? localReport.Render(report.ExportFormat.ToString())
-                : localReport.Render(report.ExportFormat.ToString(), deviceInfo);
+                ? localReport.Render(rendererFormat)
+                : localReport.Render(rendererFormat, deviceInfo);
+        }
+
+        internal static string GetRendererFormatName(ExportFormat format)
+        {
+            return format == ExportFormat.HTML4_0 ? "HTML4.0" : format.ToString();
         }
 
         /// <summary>
@@ -804,6 +954,14 @@ Example:
         public static Dictionary<string, string> GetCurrentParameters()
         {
             return new Dictionary<string, string>(GetParameters, StringComparer.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Gets a copy of the currently parsed sub-report mappings.
+        /// </summary>
+        public static Dictionary<string, string> GetCurrentSubReports()
+        {
+            return new Dictionary<string, string>(GetSubReports, StringComparer.OrdinalIgnoreCase);
         }
 
         public static int GetExitCode(Exception exception)
@@ -924,7 +1082,8 @@ Example:
                 || string.Equals(parameterName, VerboseOption, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(parameterName, ContinueOnErrorOption, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(parameterName, ValidateOption, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(parameterName, OpenExportOption, StringComparison.OrdinalIgnoreCase);
+                || string.Equals(parameterName, OpenExportOption, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(parameterName, ProgressOption, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void ValidateBooleanOption(string parameterName, string value)
@@ -933,6 +1092,11 @@ Example:
             {
                 throw new ArgumentException($"{parameterName} must be true or false.");
             }
+        }
+
+        public static void ThrowIfCancellationRequested(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
         }
 
         private static bool GetWaitForViewer()
@@ -953,6 +1117,11 @@ Example:
         private static bool GetContinueOnError()
         {
             return GetBooleanParameter(ContinueOnErrorOption, defaultValue: true);
+        }
+
+        private static bool GetProgressEnabled()
+        {
+            return GetBooleanParameter(ProgressOption, defaultValue: false);
         }
 
         private static string GetLogFilePath()
@@ -1036,6 +1205,24 @@ Example:
             }
 
             WriteStructuredLog("Info", eventName, reportPath, message, null, duration, details, logFile);
+        }
+
+        private static void WriteProgress(string eventName, string reportPath)
+        {
+            if (!GetProgressEnabled())
+            {
+                return;
+            }
+
+            lock (ConsoleSync)
+            {
+                Console.WriteLine(JsonSerializer.Serialize(new
+                {
+                    @event = eventName,
+                    reportPath,
+                    timestamp = DateTimeOffset.UtcNow
+                }));
+            }
         }
 
         private static void LogError(Exception exception, bool enableErrorLogging, string reportPath = null, string logFile = null)

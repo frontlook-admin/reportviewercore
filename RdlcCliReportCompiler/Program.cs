@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 namespace CliReportCompiler
 {
@@ -13,11 +14,20 @@ namespace CliReportCompiler
                 return;
             }
 
+            using var cancellationSource = new CancellationTokenSource();
+            ConsoleCancelEventHandler cancelHandler = (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                cancellationSource.Cancel();
+            };
+            Console.CancelKeyPress += cancelHandler;
+
             try
             {
-                if (ReportCompilerUtility.ParseArguments(args))
+                var runner = ReportCompilerRunner.TryParse(args);
+                if (runner != null)
                 {
-                    ReportCompilerUtility.Execute();
+                    runner.Execute(cancellationSource.Token);
                 }
             }
             catch (Exception ex)
@@ -25,6 +35,10 @@ namespace CliReportCompiler
                 ReportCompilerUtility.ShowUsage();
                 ReportCompilerUtility.LogError(ex);
                 Environment.ExitCode = ReportCompilerUtility.GetExitCode(ex);
+            }
+            finally
+            {
+                Console.CancelKeyPress -= cancelHandler;
             }
         }
     }

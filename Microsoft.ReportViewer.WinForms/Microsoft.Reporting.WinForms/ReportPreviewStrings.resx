@@ -142,4 +142,13 @@
   <data name="ReportItemAccessibleNameTextBox"><value>Text Box</value></data>
   <data name="ReportActionAccessibleNameSort"><value>Sort</value></data>
   <data name="PrintPreviewToolTipText"><value>Print Layout</value></data>
-  </root>
+    <data name="ThemeMenuItemText"><value>Theme</value></data>
+  <data name="ThemeButtonToolTip"><value>Change viewer theme</value></data>
+  <data name="LightThemeMenuItemText"><value>Light</value></data>
+  <data name="DarkThemeMenuItemText"><value>Dark</value></data>
+  <data name="HighContrastThemeMenuItemText"><value>High contrast</value></data>
+  <data name="ToolStripAccessibleName"><value>Report toolbar</value></data>
+  <data name="PrintDialogToolTip"><value>Print dialog</value></data>
+  <data name="OpenFileAfterExport"><value>Open file after export</value></data>
+  <data name="ReplaceExistingExportFile"><value>The file already exists. Replace it?</value></data>
+</root>

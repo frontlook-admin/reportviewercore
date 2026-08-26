@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Reflection;
+using Microsoft.Reporting.WinForms;
 using ReportViewerControl = Microsoft.Reporting.WinForms.ReportViewer;
 using Xunit;
 
@@ -8,6 +9,31 @@ namespace Microsoft.ReportViewer.WinForms.Tests;
 public sealed class RowCursorTests
 {
     [Fact]
+    public void ReportViewer_ExposesPublicRowSelectionContract()
+    {
+        var selection = new ReportViewerRowSelection(2, 4, false, "tablix", 7, ["A", "B"]);
+
+        selection.PageNumber.Should().Be(2);
+        selection.RowIndex.Should().Be(4);
+        selection.IsHeader.Should().BeFalse();
+        selection.Source.Should().Be("tablix");
+        selection.Cells.Should().Equal("A", "B");
+    }
+
+    [Fact]
+    public void ReportViewer_ExposesRowSelectionChangedEventAndClipboardActions()
+    {
+        typeof(ReportViewerControl).GetEvent(nameof(ReportViewerControl.RowSelectionChanged))
+            .Should().NotBeNull();
+        typeof(ReportViewerControl).GetMethod(nameof(ReportViewerControl.CopySelectedCell))
+            .Should().NotBeNull();
+        typeof(ReportViewerControl).GetMethod(nameof(ReportViewerControl.CopySelectedRow))
+            .Should().NotBeNull();
+        typeof(ReportViewerControl).GetMethod(nameof(ReportViewerControl.CopySelectedTable))
+            .Should().NotBeNull();
+    }
+
+    [Fact]
     public void ReportViewer_RowCursor_ExposesEnabledByDefaultOptOutProperty()
     {
         var property = typeof(ReportViewerControl).GetProperty(nameof(ReportViewerControl.EnableRowCursor));
@@ -15,6 +41,14 @@ public sealed class RowCursorTests
         property.Should().NotBeNull();
         property!.PropertyType.Should().Be(typeof(bool));
         property.GetCustomAttribute<DefaultValueAttribute>()!.Value.Should().Be(true);
+
+        var internalViewerType = typeof(ReportViewerControl).Assembly
+            .GetType("Microsoft.Reporting.WinForms.WinRSviewer");
+        var internalProperty = internalViewerType!.GetProperty(nameof(ReportViewerControl.EnableRowCursor));
+
+        internalProperty.Should().NotBeNull();
+        internalProperty!.GetCustomAttribute<DesignerSerializationVisibilityAttribute>()!.Visibility
+            .Should().Be(DesignerSerializationVisibility.Hidden);
     }
 
     [Fact]

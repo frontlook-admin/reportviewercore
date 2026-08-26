@@ -212,7 +212,7 @@ namespace Microsoft.Reporting.WinForms
 
 		string IReportViewerMessages2.GetLocalizedNameForRenderingExtension(string format)
 		{
-			throw new NotImplementedException();
+			return null;
 		}
 
 		public string GetLocalizedNameForRenderingExtension(RenderingExtension ext)

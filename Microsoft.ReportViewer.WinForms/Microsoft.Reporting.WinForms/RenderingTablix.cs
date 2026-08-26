@@ -96,12 +96,7 @@ namespace Microsoft.Reporting.WinForms
 					num3++;
 					continue;
 				}
-				context.RenderingReport.AddTablixRowTarget(
-					new RectangleF(bounds.X, bounds.Top + num, GetTablixWidth(rPLTablix), rPLTablix.RowHeights[num3]),
-					num3 < rPLTablix.ColumnHeaderRows,
-					num3,
-					source,
-					sourceOrder);
+				List<string> rowCells = new List<string>();
 				SharedRenderer.CalculateColumnZIndexes(rPLTablix, nextRow, num3, array2);
 				if (nextRow.OmittedHeaders != null)
 				{
@@ -132,8 +127,10 @@ namespace Microsoft.Reporting.WinForms
 					RenderingItem renderingItem = RenderingItem.CreateRenderingItem(context, rPLItemMeasurement, bounds);
 					if (renderingItem == null)
 					{
+						rowCells.Add(string.Empty);
 						continue;
 					}
+					rowCells.Add(renderingItem is RenderingTextBox textBox ? textBox.GetText() ?? string.Empty : string.Empty);
 					if (renderingItem is RenderingDynamicImage)
 					{
 						((RenderingDynamicImage)renderingItem).Sizing = RPLFormat.Sizings.Fit;
@@ -191,6 +188,13 @@ namespace Microsoft.Reporting.WinForms
 						fixedHeaderItem2.Bounds = renderingItem.Position;
 					}
 				}
+				context.RenderingReport.AddTablixRowTargetWithCells(
+					new RectangleF(bounds.X, bounds.Top + num, GetTablixWidth(rPLTablix), rPLTablix.RowHeights[num3]),
+					num3 < rPLTablix.ColumnHeaderRows,
+					num3,
+					source,
+					sourceOrder,
+					rowCells);
 				num4 = num5;
 				if (fixedHeaderItem != null)
 				{

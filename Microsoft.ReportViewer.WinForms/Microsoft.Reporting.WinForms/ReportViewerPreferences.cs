@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 
@@ -63,6 +64,9 @@ namespace Microsoft.Reporting.WinForms
 
         public bool ShowFindControls { get; set; } = true;
 
+        public Dictionary<string, Dictionary<string, ReportViewerParameterPreset>> ParameterPresets { get; set; } =
+            new Dictionary<string, Dictionary<string, ReportViewerParameterPreset>>(StringComparer.OrdinalIgnoreCase);
+
         internal static ReportViewerPreferences Read(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath))
@@ -80,7 +84,7 @@ namespace Microsoft.Reporting.WinForms
                 ?? throw new InvalidDataException("The viewer preferences file is empty or invalid.");
         }
 
-        internal string ToJson()
+        public string ToJson()
         {
             return JsonSerializer.Serialize(this, new JsonSerializerOptions
             {

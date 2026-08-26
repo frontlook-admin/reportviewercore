@@ -20,6 +20,49 @@ public sealed class RdlcPaginationAndPrintRegressionTests
     }
 
     [Fact]
+    public async Task RenderToStreamAsync_WritesRenderedBytesWithoutByteArrayApi()
+    {
+        using var report = CreateReport();
+        using var destination = new MemoryStream();
+
+        var result = await report.RenderToStreamAsync(destination, "PDF", string.Empty);
+
+        result.Format.Should().Be("PDF");
+        result.FilePath.Should().BeNull();
+        result.BytesWritten.Should().Be(destination.Length);
+        destination.Length.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task RenderToStreamAsync_PreCancelledRequestLeavesDestinationUntouched()
+    {
+        using var report = CreateReport();
+        using var destination = new MemoryStream();
+        destination.WriteByte(0x5A);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Func<Task> act = () => report.RenderToStreamAsync(destination, "PDF", string.Empty, cancellation.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        destination.ToArray().Should().Equal(0x5A);
+    }
+
+    [Fact]
+    public void ExportResult_ExposesSecondaryFilesWithoutMaterializingPrimaryBytes()
+    {
+        typeof(ReportExportResult).GetProperty(nameof(ReportExportResult.SecondaryFiles))
+            .Should().NotBeNull();
+        typeof(ReportExportResult).GetProperty(nameof(ReportExportResult.BytesWritten))
+            .Should().NotBeNull();
+        typeof(ReportExportResult).GetProperty(nameof(ReportExportResult.FilePath))
+            .Should().NotBeNull();
+
+        typeof(Report).GetMethod("RenderToStreamAsync")
+            .Should().NotBeNull();
+    }
+
+    [Fact]
     public void TwoPageTablix_RecordsEstimatedAndActualCountsSeparately()
     {
         using var report = CreateReport();

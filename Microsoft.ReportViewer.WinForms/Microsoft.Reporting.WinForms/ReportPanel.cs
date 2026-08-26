@@ -430,6 +430,13 @@ namespace Microsoft.Reporting.WinForms
 				{
 					list.Add(new RenderingReportSectionAccessibleObject(m_control, this, reportSection));
 				}
+				if (m_control.CurrentPage is GdiPage gdiPage)
+				{
+					foreach (TablixRowTarget target in gdiPage.RowTargets)
+					{
+						list.Add(new TablixRowAccessibleObject(m_control, this, target, gdiPage));
+					}
+				}
 				return list;
 			}
 
@@ -447,6 +454,30 @@ namespace Microsoft.Reporting.WinForms
 				}
 				return list[index];
 			}
+		}
+
+		private sealed class TablixRowAccessibleObject : AccessibleObjectBase
+		{
+			private readonly TablixRowTarget m_target;
+			private readonly GdiPage m_page;
+
+			public TablixRowAccessibleObject(ReportPanel control, AccessibleObject parent, TablixRowTarget target, GdiPage page)
+				: base(control, parent)
+			{
+				m_target = target;
+				m_page = page;
+			}
+
+			public override string Name => (m_target.IsHeader ? "Header row " : "Row ") + m_target.RowIndex;
+
+			public override string Value => string.Join("	", m_target.Cells);
+
+			public override AccessibleRole Role => AccessibleRole.Row;
+
+			public override AccessibleStates State => base.State
+				| (ReferenceEquals(m_page.SelectedRowTarget, m_target) ? AccessibleStates.Selected : AccessibleStates.None);
+
+			public override Rectangle Bounds => RenderingElementBaseAccessibleObject.GetBounds(base.Control, m_target.Bounds);
 		}
 
 		private class RenderingPanel : Panel
@@ -1589,6 +1620,7 @@ namespace Microsoft.Reporting.WinForms
 			}
 
 			SetFocusPointMm(gdiPage.SelectedRowFocusPoint, WinRSviewer.FocusMode.AvoidScrolling);
+			ViewerControl.NotifyRowSelectionChanged(gdiPage);
 			Invalidate(invalidateChildren: true);
 			return true;
 		}
@@ -1611,6 +1643,7 @@ namespace Microsoft.Reporting.WinForms
 			}
 
 			SetFocusPointMm(gdiPage.SelectedRowFocusPoint, WinRSviewer.FocusMode.AvoidScrolling);
+			ViewerControl.NotifyRowSelectionChanged(gdiPage);
 			Invalidate(invalidateChildren: true);
 			return true;
 		}

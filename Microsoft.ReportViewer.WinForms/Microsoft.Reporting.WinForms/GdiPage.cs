@@ -128,6 +128,10 @@ namespace Microsoft.Reporting.WinForms
 			}
 		}
 
+		internal TablixRowTarget SelectedRowTarget => GetSelectedRowTarget();
+
+		internal IReadOnlyList<TablixRowTarget> RowTargets => m_gdiRenderer?.Report?.TablixRowTargets;
+
 		internal bool MoveSelectedRow(bool reverse)
 		{
 			IReadOnlyList<TablixRowTarget> targets = m_gdiRenderer.Report.TablixRowTargets;

@@ -199,7 +199,7 @@ namespace Microsoft.Reporting.WinForms
             DirectPrint.ToolTipText = GetDirectPrintText();
             printerPageSettings.ToolTipText = LocalizationHelper.Current.PageSetupButtonToolTip;
             export.ToolTipText = LocalizationHelper.Current.ExportButtonToolTip;
-            themeButton.ToolTipText = "Change viewer theme";
+            themeButton.ToolTipText = ReportPreviewStrings.ThemeButtonToolTip;
             zoom.ToolTipText = LocalizationHelper.Current.ZoomControlToolTip;
             textToFind.ToolTipText = LocalizationHelper.Current.SearchTextBoxToolTip;
             find.Text = LocalizationHelper.Current.FindButtonText;
@@ -415,7 +415,7 @@ namespace Microsoft.Reporting.WinForms
             // 
             // toolStrip1
             // 
-            toolStrip1.AccessibleName = "Toolstrip";
+            toolStrip1.AccessibleName = ReportPreviewStrings.ToolStripAccessibleName;
             toolStrip1.AutoSize = true;
             toolStrip1.Dock = DockStyle.Fill;
             toolStrip1.GripStyle = ToolStripGripStyle.Hidden;
@@ -441,7 +441,7 @@ namespace Microsoft.Reporting.WinForms
             DirectPrint.ImageTransparentColor = Color.Magenta;
             DirectPrint.Name = "DirectPrint";
             DirectPrint.Size = new Size(23, 22);
-            DirectPrint.ToolTipText = "Direct Print";
+            DirectPrint.ToolTipText = ReportPreviewStrings.DirectPrintMenuItemText.Replace("&", string.Empty);
             DirectPrint.Click += OnDPrint;
             // 
             // PrintDialog
@@ -450,7 +450,7 @@ namespace Microsoft.Reporting.WinForms
             PrintDialog.ImageTransparentColor = Color.Fuchsia;
             PrintDialog.Name = "PrintDialog";
             PrintDialog.Size = new Size(23, 22);
-            PrintDialog.ToolTipText = "Print Dialog";
+            PrintDialog.ToolTipText = ReportPreviewStrings.PrintDialogToolTip;
             PrintDialog.Click += OnPrint;
             // 
             // printPreview
@@ -478,7 +478,7 @@ namespace Microsoft.Reporting.WinForms
             printerPageSettings.ImageTransparentColor = Color.Magenta;
             printerPageSettings.Name = "printerPageSettings";
             printerPageSettings.Size = new Size(23, 22);
-            printerPageSettings.Text = "Printer & Page Settings";
+            printerPageSettings.Text = ReportPreviewStrings.PrinterPageSettingsMenuItemText;
             printerPageSettings.Click += OnPrinterPageSettings_Click;
             // 
             // export
@@ -495,15 +495,15 @@ namespace Microsoft.Reporting.WinForms
             themeButton.DisplayStyle = ToolStripItemDisplayStyle.Text;
             themeButton.Name = "themeButton";
             themeButton.Size = new Size(58, 32);
-            themeButton.Text = "Theme";
-            themeButton.AccessibleName = "Change viewer theme";
+            themeButton.Text = ReportPreviewStrings.ThemeMenuItemText;
+            themeButton.AccessibleName = ReportPreviewStrings.ThemeButtonToolTip;
             themeButton.DropDownItemClicked += OnThemeItemClicked;
             lightTheme.Name = "lightTheme";
-            lightTheme.Text = "Light";
+            lightTheme.Text = ReportPreviewStrings.LightThemeMenuItemText;
             darkTheme.Name = "darkTheme";
-            darkTheme.Text = "Dark";
+            darkTheme.Text = ReportPreviewStrings.DarkThemeMenuItemText;
             highContrastTheme.Name = "highContrastTheme";
-            highContrastTheme.Text = "High contrast";
+            highContrastTheme.Text = ReportPreviewStrings.HighContrastThemeMenuItemText;
             // 
             // separator4
             // 

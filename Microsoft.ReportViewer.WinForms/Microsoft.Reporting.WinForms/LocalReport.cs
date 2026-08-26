@@ -14,6 +14,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.Serialization;
 using System.Security;
@@ -37,6 +38,10 @@ namespace Microsoft.Reporting.WinForms
 		private bool m_enableHyperlinks;
 
 		private bool m_enableExternalImages;
+
+		private ReportSecurityPolicy m_securityPolicy = ReportSecurityPolicy.Default;
+
+		private IReadOnlyList<ReportSecurityDiagnostic> m_securityDiagnostics = Array.Empty<ReportSecurityDiagnostic>();
 
 		private NameValueCollection m_parentSuppliedParameters;
 
@@ -166,6 +171,34 @@ namespace Microsoft.Reporting.WinForms
 				}
 			}
 		}
+
+		/// <summary>Opt-in restrictions for report code and external resources.</summary>
+		[Category("Security")]
+		[Browsable(false)]
+		public ReportSecurityPolicy SecurityPolicy
+		{
+			get
+			{
+				lock (m_syncObject)
+				{
+					return m_securityPolicy;
+				}
+			}
+			set
+			{
+				if (value == null)
+				{
+					throw new ArgumentNullException(nameof(value));
+				}
+				lock (m_syncObject)
+				{
+					m_securityPolicy = value;
+				}
+			}
+		}
+
+		[Browsable(false)]
+		public IReadOnlyList<ReportSecurityDiagnostic> SecurityDiagnostics => m_securityDiagnostics;
 
 		[NotifyParentProperty(true)]
 		[DefaultValue(true)]
@@ -445,17 +478,37 @@ namespace Microsoft.Reporting.WinForms
 
 		public override void LoadReportDefinition(TextReader report)
 		{
+			LoadReportDefinition(report, isTrusted: false);
+		}
+
+		/// <summary>Loads a definition after applying the configured policy. This is not an in-process sandbox boundary.</summary>
+		public void LoadReportDefinition(TextReader report, bool isTrusted)
+		{
 			lock (m_syncObject)
 			{
 				if (report == null)
 				{
 					throw new ArgumentNullException("report");
 				}
-				SetDirectReportDefinition("", report);
+				string definition = report.ReadToEnd();
+				ReportSecurityAnalysis analysis = SecurityPolicy.Analyze(definition, isTrusted);
+				m_securityDiagnostics = analysis.Diagnostics;
+				if (!analysis.IsAllowed)
+				{
+					throw new ReportSecurityException(string.Join(" ", analysis.Diagnostics
+						.Where(diagnostic => diagnostic.Severity == ReportSecurityDiagnosticSeverity.Error)
+						.Select(diagnostic => diagnostic.Message)));
+				}
+				SetDirectReportDefinition("", new StringReader(definition));
 			}
 		}
 
 		public void LoadSubreportDefinition(string reportName, TextReader report)
+		{
+			LoadSubreportDefinition(reportName, report, isTrusted: false);
+		}
+
+		public void LoadSubreportDefinition(string reportName, TextReader report, bool isTrusted)
 		{
 			lock (m_syncObject)
 			{
@@ -471,7 +524,16 @@ namespace Microsoft.Reporting.WinForms
 				{
 					throw new ArgumentNullException("report");
 				}
-				SetDirectReportDefinition(reportName, report);
+				string definition = report.ReadToEnd();
+				ReportSecurityAnalysis analysis = SecurityPolicy.Analyze(definition, isTrusted);
+				m_securityDiagnostics = analysis.Diagnostics;
+				if (!analysis.IsAllowed)
+				{
+					throw new ReportSecurityException(string.Join(" ", analysis.Diagnostics
+						.Where(diagnostic => diagnostic.Severity == ReportSecurityDiagnosticSeverity.Error)
+						.Select(diagnostic => diagnostic.Message)));
+				}
+				SetDirectReportDefinition(reportName, new StringReader(definition));
 			}
 		}
 
@@ -767,6 +829,7 @@ namespace Microsoft.Reporting.WinForms
 			m_processingHost.CopySecuritySettingsFrom(parentReport.m_processingHost);
 			m_enableExternalImages = parentReport.EnableExternalImages;
 			m_enableHyperlinks = parentReport.EnableHyperlinks;
+			m_securityPolicy = parentReport.SecurityPolicy;
 			ShowDetailedSubreportMessages = parentReport.ShowDetailedSubreportMessages;
 		}
 
